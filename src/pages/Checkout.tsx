@@ -8,8 +8,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useRazorpay } from "@/hooks/useRazorpay";
 
 const Checkout = () => {
+  useRazorpay();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [userId, setUserId] = useState<string | null>(null);
@@ -58,19 +60,20 @@ const Checkout = () => {
   const tax = subtotal * 0.05;
   const total = subtotal + tax;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!userId || !cartItems || cartItems.length === 0) return;
 
     try {
-      // Create order
+      // Create order first
       const { data: order, error: orderError } = await supabase
         .from("orders")
         .insert({
           user_id: userId,
           total_amount: total,
           status: "pending",
+          payment_status: "pending",
           delivery_name: formData.name,
           delivery_phone: formData.phone,
           delivery_address: formData.address,
@@ -95,19 +98,63 @@ const Checkout = () => {
       const { error: itemsError } = await supabase.from("order_items").insert(orderItems);
       if (itemsError) throw itemsError;
 
-      // Clear cart
-      const { error: clearError } = await supabase
-        .from("cart_items")
-        .delete()
-        .eq("user_id", userId);
-      if (clearError) throw clearError;
+      // Initialize Razorpay payment
+      const options = {
+        key: "rzp_test_YOUR_KEY_HERE", // Replace with your Razorpay key
+        amount: Math.round(total * 100), // Amount in paise
+        currency: "INR",
+        name: "MediShop",
+        description: `Order #${order.id.slice(0, 8)}`,
+        order_id: order.id,
+        handler: async (response: any) => {
+          // Payment successful
+          const { error: updateError } = await supabase
+            .from("orders")
+            .update({
+              status: "paid",
+              payment_status: "paid",
+              payment_id: response.razorpay_payment_id,
+            })
+            .eq("id", order.id);
 
-      toast({
-        title: "Order placed!",
-        description: "Your order has been placed successfully.",
-      });
+          if (updateError) throw updateError;
 
-      navigate("/");
+          // Clear cart
+          await supabase.from("cart_items").delete().eq("user_id", userId);
+
+          toast({
+            title: "Payment successful!",
+            description: "Your order has been placed.",
+          });
+          
+          navigate("/order-history");
+        },
+        prefill: {
+          name: formData.name,
+          contact: formData.phone,
+        },
+        theme: {
+          color: "#4F46E5",
+        },
+        modal: {
+          ondismiss: async () => {
+            // Payment cancelled - update order
+            await supabase
+              .from("orders")
+              .update({ payment_status: "cancelled" })
+              .eq("id", order.id);
+
+            toast({
+              title: "Payment cancelled",
+              description: "Your order was not completed.",
+              variant: "destructive",
+            });
+          },
+        },
+      };
+
+      const razorpay = new (window as any).Razorpay(options);
+      razorpay.open();
     } catch (error: any) {
       toast({
         title: "Error",
@@ -124,7 +171,7 @@ const Checkout = () => {
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-8">Checkout</h1>
 
-        <form onSubmit={handleSubmit} className="grid lg:grid-cols-3 gap-8">
+        <form onSubmit={handlePayment} className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
             <Card className="p-6">
               <h2 className="text-xl font-bold mb-6">Delivery Information</h2>
@@ -216,11 +263,12 @@ const Checkout = () => {
               <Button
                 type="submit"
                 className="w-full bg-gradient-to-r from-primary to-secondary"
+                disabled={!cartItems || cartItems.length === 0}
               >
-                Place Order
+                Pay with UPI
               </Button>
               <p className="text-xs text-muted-foreground text-center mt-4">
-                Payment integration coming soon. Orders will be placed as pending.
+                Secure UPI payment via Razorpay
               </p>
             </Card>
           </div>

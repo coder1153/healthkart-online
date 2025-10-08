@@ -8,6 +8,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
+import { ProductReviews } from "@/components/ProductReviews";
+import { WishlistButton } from "@/components/WishlistButton";
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -169,6 +171,9 @@ const ProductDetail = () => {
                   {product.stock > 0 ? `${product.stock} in stock` : "Out of stock"}
                 </span>
               </div>
+              <div className="mt-2">
+                <WishlistButton productId={id!} variant="outline" size="default" />
+              </div>
             </div>
 
             <div className="text-4xl font-bold text-primary">₹{Number(product.price).toFixed(2)}</div>
@@ -247,6 +252,8 @@ const ProductDetail = () => {
             </div>
           </div>
         </div>
+
+        <ProductReviews productId={id!} />
       </div>
     </div>
   );
