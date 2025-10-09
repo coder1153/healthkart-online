@@ -54,7 +54,7 @@ const Checkout = () => {
   });
 
   const subtotal = cartItems?.reduce(
-    (sum, item) => sum + Number(item.products.price) * item.quantity,
+    (sum, item) => sum + (item.products ? Number(item.products.price) * item.quantity : 0),
     0
   ) || 0;
   const tax = subtotal * 0.05;
