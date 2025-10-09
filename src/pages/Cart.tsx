@@ -67,10 +67,13 @@ const Cart = () => {
     },
   });
 
-  const total = cartItems?.reduce(
+  // Filter out items without valid products and calculate total
+  const validCartItems = cartItems?.filter(item => item.products) || [];
+  
+  const total = validCartItems.reduce(
     (sum, item) => sum + Number(item.products.price) * item.quantity,
     0
-  ) || 0;
+  );
 
   if (isLoading) {
     return (
@@ -85,12 +88,12 @@ const Cart = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar cartItemsCount={cartItems?.length || 0} />
+      <Navbar cartItemsCount={validCartItems.length} />
 
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-8">Shopping Cart</h1>
 
-        {!cartItems || cartItems.length === 0 ? (
+        {validCartItems.length === 0 ? (
           <Card className="p-12 text-center">
             <p className="text-muted-foreground text-lg mb-4">Your cart is empty</p>
             <Button onClick={() => navigate("/products")}>Continue Shopping</Button>
@@ -98,7 +101,7 @@ const Cart = () => {
         ) : (
           <div className="grid lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-4">
-              {cartItems.map((item) => (
+              {validCartItems.map((item) => (
                 <Card key={item.id} className="p-6">
                   <div className="flex gap-4">
                     <div className="w-24 h-24 rounded-lg bg-muted flex-shrink-0">
