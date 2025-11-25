@@ -5,30 +5,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Package, ShoppingCart, Users, TrendingUp } from "lucide-react";
+import { verifyAdminSession } from "@/lib/adminAuth";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const [userId, setUserId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const checkAdmin = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        navigate("/auth");
-        return;
-      }
-      setUserId(data.session.user.id);
-
-      const { data: roleData } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", data.session.user.id)
-        .eq("role", "admin")
-        .maybeSingle();
-
-      if (!roleData) {
-        navigate("/");
+      const isValid = await verifyAdminSession();
+      if (!isValid) {
+        navigate("/admin/login");
         return;
       }
       setIsAdmin(true);

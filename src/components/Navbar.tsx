@@ -1,11 +1,27 @@
-import { ShoppingCart, Heart, User, Search, Menu } from "lucide-react";
+import { ShoppingCart, Heart, User, Search, Menu, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getAdminSession } from "@/lib/adminAuth";
 
 export const Navbar = ({ cartItemsCount = 0 }: { cartItemsCount?: number }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const checkAdminSession = () => {
+      const session = getAdminSession();
+      setIsAdmin(!!session);
+    };
+    
+    checkAdminSession();
+    
+    // Check every minute if admin session is still valid
+    const interval = setInterval(checkAdminSession, 60000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -35,6 +51,13 @@ export const Navbar = ({ cartItemsCount = 0 }: { cartItemsCount?: number }) => {
 
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center space-x-4">
+            {isAdmin && (
+              <Button variant="ghost" size="icon" asChild title="Admin Panel">
+                <Link to="/admin">
+                  <ShieldCheck className="h-5 w-5 text-primary" />
+                </Link>
+              </Button>
+            )}
             <Button variant="ghost" size="icon" asChild>
               <Link to="/auth">
                 <User className="h-5 w-5" />
@@ -78,6 +101,14 @@ export const Navbar = ({ cartItemsCount = 0 }: { cartItemsCount?: number }) => {
               />
             </div>
             <div className="flex justify-around">
+              {isAdmin && (
+                <Button variant="ghost" size="sm" asChild>
+                  <Link to="/admin">
+                    <ShieldCheck className="h-4 w-4 mr-2 text-primary" />
+                    Admin
+                  </Link>
+                </Button>
+              )}
               <Button variant="ghost" size="sm" asChild>
                 <Link to="/auth">
                   <User className="h-4 w-4 mr-2" />

@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { Pencil, Trash2, Plus } from "lucide-react";
+import { verifyAdminSession } from "@/lib/adminAuth";
 import {
   Dialog,
   DialogContent,
@@ -47,21 +48,9 @@ const AdminProducts = () => {
 
   useEffect(() => {
     const checkAdmin = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        navigate("/auth");
-        return;
-      }
-
-      const { data: roleData } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", data.session.user.id)
-        .eq("role", "admin")
-        .maybeSingle();
-
-      if (!roleData) {
-        navigate("/");
+      const isValid = await verifyAdminSession();
+      if (!isValid) {
+        navigate("/admin/login");
         return;
       }
       setIsAdmin(true);

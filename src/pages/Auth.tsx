@@ -67,25 +67,13 @@ const Auth = () => {
 
       if (error) throw error;
 
-      // Check if user has admin role
-      const { data: roleData } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", data.user.id)
-        .eq("role", "admin")
-        .maybeSingle();
-
       toast({
         title: "Welcome back!",
         description: "You have successfully logged in.",
       });
 
-      // Redirect based on role
-      if (roleData) {
-        navigate("/admin");
-      } else {
-        navigate("/");
-      }
+      // Regular users go to home page
+      navigate("/");
     } catch (error: any) {
       toast({
         title: "Error",
