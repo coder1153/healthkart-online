@@ -14,6 +14,77 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_audit: {
+        Row: {
+          action: string
+          admin_key_id: string | null
+          after: Json | null
+          before: Json | null
+          id: string
+          resource_id: string | null
+          resource_type: string | null
+          timestamp: string | null
+        }
+        Insert: {
+          action: string
+          admin_key_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          id?: string
+          resource_id?: string | null
+          resource_type?: string | null
+          timestamp?: string | null
+        }
+        Update: {
+          action?: string
+          admin_key_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          id?: string
+          resource_id?: string | null
+          resource_type?: string | null
+          timestamp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_audit_admin_key_id_fkey"
+            columns: ["admin_key_id"]
+            isOneToOne: false
+            referencedRelation: "admin_keys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_keys: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          expires_at: string | null
+          id: string
+          key_hash: string
+          label: string
+          last_used_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          key_hash: string
+          label: string
+          last_used_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          key_hash?: string
+          label?: string
+          last_used_at?: string | null
+        }
+        Relationships: []
+      }
       cart_items: {
         Row: {
           created_at: string
