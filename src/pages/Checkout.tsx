@@ -8,13 +8,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { useRazorpay } from "@/hooks/useRazorpay";
+import { Loader2 } from "lucide-react";
 
 const Checkout = () => {
-  useRazorpay();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [userId, setUserId] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
@@ -65,6 +65,8 @@ const Checkout = () => {
 
     if (!userId || !cartItems || cartItems.length === 0) return;
 
+    setIsProcessing(true);
+
     try {
       // Create order first
       const { data: order, error: orderError } = await supabase
@@ -98,69 +100,55 @@ const Checkout = () => {
       const { error: itemsError } = await supabase.from("order_items").insert(orderItems);
       if (itemsError) throw itemsError;
 
-      // Initialize Razorpay payment
-      const options = {
-        key: "rzp_test_YOUR_KEY_HERE", // Replace with your Razorpay key
-        amount: Math.round(total * 100), // Amount in paise
-        currency: "INR",
-        name: "MediShop",
-        description: `Order #${order.id.slice(0, 8)}`,
-        order_id: order.id,
-        handler: async (response: any) => {
-          // Payment successful
-          const { error: updateError } = await supabase
-            .from("orders")
-            .update({
-              status: "paid",
-              payment_status: "paid",
-              payment_id: response.razorpay_payment_id,
-            })
-            .eq("id", order.id);
-
-          if (updateError) throw updateError;
-
-          // Clear cart
-          await supabase.from("cart_items").delete().eq("user_id", userId);
-
-          toast({
-            title: "Payment successful!",
-            description: "Your order has been placed.",
-          });
-          
-          navigate("/order-history");
-        },
-        prefill: {
-          name: formData.name,
-          contact: formData.phone,
-        },
-        theme: {
-          color: "#4F46E5",
-        },
-        modal: {
-          ondismiss: async () => {
-            // Payment cancelled - update order
-            await supabase
-              .from("orders")
-              .update({ payment_status: "cancelled" })
-              .eq("id", order.id);
-
-            toast({
-              title: "Payment cancelled",
-              description: "Your order was not completed.",
-              variant: "destructive",
-            });
+      // Get user session for auth
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      // Create Shiprocket payment session
+      const { data: sessionData, error: sessionError } = await supabase.functions.invoke(
+        'shiprocket-create-session',
+        {
+          body: {
+            orderId: order.id,
+            amount: total,
+            currency: 'INR',
+            customer: {
+              name: formData.name,
+              email: session?.user.email || '',
+              phone: formData.phone,
+            },
+            items: orderItems.map(item => ({
+              sku: item.product_id,
+              name: item.product_name,
+              qty: item.quantity,
+              price: item.product_price,
+            })),
           },
-        },
-      };
+        }
+      );
 
-      const razorpay = new (window as any).Razorpay(options);
-      razorpay.open();
+      if (sessionError) throw sessionError;
+
+      console.log('Payment session created:', sessionData);
+
+      // Show toast for test mode
+      if (sessionData.test_mode) {
+        toast({
+          title: "Test Mode Active",
+          description: "You'll be redirected to a test payment page. Choose success or failure to continue.",
+        });
+      }
+
+      // Redirect to Shiprocket payment page
+      window.location.href = sessionData.session_url;
+
     } catch (error: any) {
+      console.error('Payment error:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || "Failed to initiate payment",
         variant: "destructive",
       });
+      setIsProcessing(false);
     }
   };
 
@@ -263,12 +251,19 @@ const Checkout = () => {
               <Button
                 type="submit"
                 className="w-full bg-gradient-to-r from-primary to-secondary"
-                disabled={!cartItems || cartItems.length === 0}
+                disabled={!cartItems || cartItems.length === 0 || isProcessing}
               >
-                Pay with UPI
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  "Pay with Shiprocket"
+                )}
               </Button>
               <p className="text-xs text-muted-foreground text-center mt-4">
-                Secure UPI payment via Razorpay
+                Secure payment via Shiprocket Click-to-Pay
               </p>
             </Card>
           </div>
