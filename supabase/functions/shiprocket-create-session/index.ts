@@ -1,26 +1,37 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { crypto } from "https://deno.land/std@0.224.0/crypto/mod.ts";
+import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface PaymentSessionRequest {
-  orderId: string;
-  amount: number;
-  currency: string;
-  customer: {
-    name: string;
-    email: string;
-    phone: string;
-  };
-  items: Array<{
-    sku: string;
-    name: string;
-    qty: number;
-    price: number;
+interface CheckoutRequest {
+  cartItems: Array<{
+    variant_id: string;
+    quantity: number;
   }>;
+  redirectUrl: string;
+}
+
+// Generate HMAC-SHA256 signature in base64
+async function generateHMAC(secretKey: string, data: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secretKey);
+  const messageData = encoder.encode(data);
+  
+  const key = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  
+  const signature = await crypto.subtle.sign('HMAC', key, messageData);
+  return encodeBase64(new Uint8Array(signature));
 }
 
 serve(async (req: Request) => {
@@ -49,69 +60,73 @@ serve(async (req: Request) => {
       throw new Error('Unauthorized');
     }
 
-    const body: PaymentSessionRequest = await req.json();
-    
-    console.log('Creating Shiprocket payment session for order:', body.orderId);
+    const body: CheckoutRequest = await req.json();
 
-    // TEST MODE: In production, you would call actual Shiprocket API here
-    // For now, we'll generate a mock session URL
-    const shiprocketApiKey = Deno.env.get('SHIPROCKET_API_KEY');
-    const isTestMode = !shiprocketApiKey || shiprocketApiKey === 'test_mode';
+    console.log('Generating Shiprocket checkout token for user:', user.id);
 
-    let sessionUrl: string;
-    let sessionId: string;
+    // Check if we're in test mode (no API key configured)
+    const apiKey = Deno.env.get('SHIPROCKET_API_KEY');
+    const secretKey = Deno.env.get('SHIPROCKET_API_SECRET');
+    const isTestMode = !apiKey || !secretKey;
+
+    let token: string;
+    let orderId: string;
 
     if (isTestMode) {
-      // TEST MODE: Generate mock session
-      sessionId = `test_session_${Date.now()}`;
-      const baseUrl = Deno.env.get('SUPABASE_URL')?.replace('/v1', '') || '';
-      // Create a test payment page URL that will redirect back with success
-      sessionUrl = `${baseUrl}/functions/v1/shiprocket-test-payment?session_id=${sessionId}&order_id=${body.orderId}&amount=${body.amount}`;
+      // TEST MODE: Generate mock token
+      token = `test_token_${Date.now()}_${user.id}`;
+      orderId = `test_order_${Date.now()}`;
       
-      console.log('TEST MODE: Generated mock session URL');
+      console.log('TEST MODE: Generated mock checkout token');
     } else {
-      // PRODUCTION MODE: Call actual Shiprocket API
-      const shiprocketResponse = await fetch('https://apiv2.shiprocket.in/v1/external/payment/session', {
+      // PRODUCTION MODE: Call Shiprocket Access Token API
+      const timestamp = new Date().toISOString();
+      const requestBody = {
+        cart_data: {
+          items: body.cartItems
+        },
+        redirect_url: body.redirectUrl,
+        timestamp
+      };
+
+      const bodyString = JSON.stringify(requestBody);
+      const hmacSignature = await generateHMAC(secretKey, bodyString);
+
+      console.log('Calling Shiprocket Access Token API');
+
+      const response = await fetch('https://checkout-api.shiprocket.com/api/v1/access-token/checkout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${shiprocketApiKey}`,
+          'X-Api-Key': apiKey,
+          'X-Api-HMAC-SHA256': hmacSignature,
         },
-        body: JSON.stringify({
-          order_id: body.orderId,
-          amount: body.amount,
-          currency: body.currency,
-          customer: body.customer,
-          items: body.items,
-          callback_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/shiprocket-webhook`,
-        }),
+        body: bodyString,
       });
 
-      if (!shiprocketResponse.ok) {
-        throw new Error(`Shiprocket API error: ${shiprocketResponse.statusText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Shiprocket API error:', errorText);
+        throw new Error(`Shiprocket API error: ${response.statusText}`);
       }
 
-      const shiprocketData = await shiprocketResponse.json();
-      sessionUrl = shiprocketData.payment_url;
-      sessionId = shiprocketData.session_id;
+      const data = await response.json();
       
-      console.log('PRODUCTION MODE: Created Shiprocket session');
-    }
+      if (!data.result?.token) {
+        throw new Error('No token received from Shiprocket');
+      }
 
-    // Store session info in order for tracking
-    await supabaseClient
-      .from('orders')
-      .update({
-        payment_id: sessionId,
-      })
-      .eq('id', body.orderId);
+      token = data.result.token;
+      orderId = data.result.order_id || `order_${Date.now()}`;
+      
+      console.log('Successfully generated Shiprocket checkout token');
+    }
 
     return new Response(
       JSON.stringify({
         success: true,
-        session_url: sessionUrl,
-        session_id: sessionId,
-        order_id: body.orderId,
+        token,
+        order_id: orderId,
         test_mode: isTestMode,
       }),
       {
@@ -120,7 +135,7 @@ serve(async (req: Request) => {
       }
     );
   } catch (error) {
-    console.error('Error creating Shiprocket session:', error);
+    console.error('Error generating checkout token:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
       JSON.stringify({ error: errorMessage }),
