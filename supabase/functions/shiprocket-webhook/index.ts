@@ -6,6 +6,32 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+interface ShiprocketWebhookPayload {
+  order_id: string;
+  cart_data: {
+    items: Array<{
+      variant_id: string;
+      quantity: number;
+    }>;
+  };
+  status: 'SUCCESS' | 'FAILED' | 'PENDING';
+  phone: string;
+  email: string;
+  payment_type: string;
+  total_amount_payable: number;
+  shipping_address?: {
+    first_name: string;
+    last_name: string;
+    address1: string;
+    address2?: string;
+    city: string;
+    province: string;
+    zip: string;
+    country: string;
+    phone: string;
+  };
+}
+
 serve(async (req: Request) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -18,54 +44,46 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // For test mode, check query parameters
+    const url = new URL(req.url);
+    const testOrderId = url.searchParams.get('order_id');
+    const testStatus = url.searchParams.get('status');
+
     let orderId: string;
-    let status: string;
-    let paymentId: string;
+    let status: 'SUCCESS' | 'FAILED' | 'PENDING';
     let isTestMode = false;
 
-    // Check if this is a test mode callback (query params) or production webhook (POST body)
-    const url = new URL(req.url);
-    if (url.searchParams.has('order_id')) {
-      // TEST MODE: Query parameters from test payment page
-      orderId = url.searchParams.get('order_id')!;
-      status = url.searchParams.get('status')!;
-      paymentId = url.searchParams.get('payment_id') || 'test_payment';
+    if (testOrderId && testStatus) {
+      // TEST MODE: Webhook from query parameters
+      console.log('Processing test mode webhook:', { testOrderId, testStatus });
+      orderId = testOrderId;
+      status = testStatus === 'success' ? 'SUCCESS' : 'FAILED';
       isTestMode = true;
-      
-      console.log('TEST MODE webhook received:', { orderId, status, paymentId });
     } else {
-      // PRODUCTION MODE: Webhook POST request from Shiprocket
-      const body = await req.json();
+      // PRODUCTION MODE: Webhook from POST body
+      const payload: ShiprocketWebhookPayload = await req.json();
+      console.log('Processing Shiprocket webhook:', payload);
       
-      // Verify webhook signature (production only)
-      const shiprocketSecret = Deno.env.get('SHIPROCKET_WEBHOOK_SECRET');
-      if (shiprocketSecret) {
-        const signature = req.headers.get('x-shiprocket-signature');
-        // TODO: Implement signature verification
-        // For now, just log it
-        console.log('Webhook signature:', signature);
-      }
-
-      orderId = body.order_id;
-      status = body.payment_status; // 'success' or 'failed'
-      paymentId = body.payment_id;
-      
-      console.log('PRODUCTION webhook received:', { orderId, status, paymentId });
+      orderId = payload.order_id;
+      status = payload.status;
     }
 
-    // Update order in database
-    const updateData: any = {
-      payment_id: paymentId,
-      payment_status: status === 'success' ? 'paid' : 'failed',
-    };
-
-    if (status === 'success') {
-      updateData.status = 'paid';
+    if (!orderId) {
+      throw new Error('Order ID not provided in webhook');
     }
 
+    // Map Shiprocket status to our payment status
+    const paymentStatus = status === 'SUCCESS' ? 'paid' : status === 'FAILED' ? 'failed' : 'pending';
+
+    console.log(`Updating order ${orderId} with payment status: ${paymentStatus}`);
+
+    // Update the order payment status
     const { error: updateError } = await supabaseClient
       .from('orders')
-      .update(updateData)
+      .update({
+        payment_status: paymentStatus,
+        status: paymentStatus === 'paid' ? 'paid' : 'pending',
+      })
       .eq('id', orderId);
 
     if (updateError) {
@@ -73,8 +91,8 @@ serve(async (req: Request) => {
       throw updateError;
     }
 
-    if (status === 'success') {
-      // Clear user's cart
+    // If payment successful, clear the user's cart
+    if (paymentStatus === 'paid') {
       const { data: order } = await supabaseClient
         .from('orders')
         .select('user_id')
@@ -82,18 +100,22 @@ serve(async (req: Request) => {
         .single();
 
       if (order) {
-        await supabaseClient
+        const { error: cartError } = await supabaseClient
           .from('cart_items')
           .delete()
           .eq('user_id', order.user_id);
-        
-        console.log('Cart cleared for user:', order.user_id);
+
+        if (cartError) {
+          console.error('Error clearing cart:', cartError);
+        } else {
+          console.log('Cart cleared for user:', order.user_id);
+        }
       }
     }
 
-    // If this is test mode, redirect to success/failure page
+    // For test mode, redirect to appropriate page
     if (isTestMode) {
-      const redirectUrl = status === 'success' 
+      const redirectUrl = paymentStatus === 'paid' 
         ? `${url.origin}/order-history?payment=success`
         : `${url.origin}/checkout?payment=failed`;
       
@@ -105,12 +127,13 @@ serve(async (req: Request) => {
       });
     }
 
-    // Production webhook response
+    // For production webhooks, return success response
     return new Response(
       JSON.stringify({ 
-        success: true,
+        success: true, 
+        message: 'Webhook processed successfully',
         order_id: orderId,
-        status: status,
+        payment_status: paymentStatus
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -10,11 +10,30 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
+// Load Shiprocket Checkout script
+const loadShiprocketScript = () => {
+  return new Promise((resolve, reject) => {
+    if (document.getElementById('shiprocket-checkout-script')) {
+      resolve(true);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'shiprocket-checkout-script';
+    script.src = 'https://checkout-ui.shiprocket.com/assets/js/channels/shopify.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => reject(new Error('Failed to load Shiprocket script'));
+    document.body.appendChild(script);
+  });
+};
+
 const Checkout = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [userId, setUserId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [scriptLoaded, setScriptLoaded] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
@@ -34,7 +53,22 @@ const Checkout = () => {
       setUserId(data.session.user.id);
     };
     checkUser();
-  }, [navigate]);
+
+    // Load Shiprocket script
+    loadShiprocketScript()
+      .then(() => {
+        setScriptLoaded(true);
+        console.log('Shiprocket script loaded successfully');
+      })
+      .catch((error) => {
+        console.error('Error loading Shiprocket script:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load payment system",
+          variant: "destructive",
+        });
+      });
+  }, [navigate, toast]);
 
   const { data: cartItems } = useQuery({
     queryKey: ["cart", userId],
@@ -62,6 +96,15 @@ const Checkout = () => {
 
   const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!scriptLoaded) {
+      toast({
+        title: "Error",
+        description: "Payment system not ready. Please refresh the page.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (!userId || !cartItems || cartItems.length === 0) return;
 
@@ -100,51 +143,61 @@ const Checkout = () => {
       const { error: itemsError } = await supabase.from("order_items").insert(orderItems);
       if (itemsError) throw itemsError;
 
-      // Get user session for auth
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      // Create Shiprocket payment session
-      const { data: sessionData, error: sessionError } = await supabase.functions.invoke(
+      // Prepare cart items for Shiprocket
+      const shiprocketCartItems = cartItems.map((item) => ({
+        variant_id: item.products.id,
+        quantity: item.quantity,
+      }));
+
+      // Get redirect URL
+      const redirectUrl = `${window.location.origin}/order-history?order_id=${order.id}`;
+
+      // Generate checkout token
+      const { data: tokenData, error: tokenError } = await supabase.functions.invoke(
         'shiprocket-create-session',
         {
           body: {
-            orderId: order.id,
-            amount: total,
-            currency: 'INR',
-            customer: {
-              name: formData.name,
-              email: session?.user.email || '',
-              phone: formData.phone,
-            },
-            items: orderItems.map(item => ({
-              sku: item.product_id,
-              name: item.product_name,
-              qty: item.quantity,
-              price: item.product_price,
-            })),
+            cartItems: shiprocketCartItems,
+            redirectUrl,
           },
         }
       );
 
-      if (sessionError) throw sessionError;
+      if (tokenError) throw tokenError;
 
-      console.log('Payment session created:', sessionData);
+      if (!tokenData.token) {
+        throw new Error('No checkout token received');
+      }
+
+      console.log('Checkout token generated:', tokenData);
+
+      // Store order ID for webhook processing
+      await supabase
+        .from('orders')
+        .update({ payment_id: tokenData.order_id })
+        .eq('id', order.id);
 
       // Show toast for test mode
-      if (sessionData.test_mode) {
+      if (tokenData.test_mode) {
         toast({
           title: "Test Mode Active",
-          description: "You'll be redirected to a test payment page. Choose success or failure to continue.",
+          description: "You'll be redirected to a test payment page.",
         });
       }
 
-      // Redirect to Shiprocket payment page
-      window.location.href = sessionData.session_url;
-
+      // Trigger Shiprocket Checkout
+      // @ts-ignore - HeadlessCheckout is loaded from external script
+      if (window.HeadlessCheckout) {
+        const fallbackUrl = `${window.location.origin}/checkout?order_id=${order.id}`;
+        // @ts-ignore
+        window.HeadlessCheckout.addToCart(e, tokenData.token, { fallbackUrl });
+      } else {
+        throw new Error('Shiprocket Checkout not loaded');
+      }
     } catch (error: any) {
       console.error('Payment error:', error);
       toast({
-        title: "Error",
+        title: "Payment Failed",
         description: error.message || "Failed to initiate payment",
         variant: "destructive",
       });
@@ -155,6 +208,7 @@ const Checkout = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navbar cartItemsCount={cartItems?.length || 0} />
+      <input type="hidden" value={window.location.hostname} id="sellerDomain" />
 
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-8">Checkout</h1>
@@ -251,7 +305,7 @@ const Checkout = () => {
               <Button
                 type="submit"
                 className="w-full bg-gradient-to-r from-primary to-secondary"
-                disabled={!cartItems || cartItems.length === 0 || isProcessing}
+                disabled={!cartItems || cartItems.length === 0 || isProcessing || !scriptLoaded}
               >
                 {isProcessing ? (
                   <>
@@ -259,11 +313,11 @@ const Checkout = () => {
                     Processing...
                   </>
                 ) : (
-                  "Pay with Shiprocket"
+                  "Checkout with Shiprocket"
                 )}
               </Button>
               <p className="text-xs text-muted-foreground text-center mt-4">
-                Secure payment via Shiprocket Click-to-Pay
+                Secure payment via Shiprocket Checkout
               </p>
             </Card>
           </div>
