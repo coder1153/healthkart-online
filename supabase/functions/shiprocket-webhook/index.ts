@@ -44,28 +44,33 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // For test mode, check query parameters
     const url = new URL(req.url);
-    const testOrderId = url.searchParams.get('order_id');
-    const testStatus = url.searchParams.get('status');
-
     let orderId: string;
     let status: 'SUCCESS' | 'FAILED' | 'PENDING';
     let isTestMode = false;
 
+    // Check for query parameter test mode first
+    const testOrderId = url.searchParams.get('order_id');
+    const testStatus = url.searchParams.get('status');
+
     if (testOrderId && testStatus) {
-      // TEST MODE: Webhook from query parameters
-      console.log('Processing test mode webhook:', { testOrderId, testStatus });
+      // TEST MODE via query params
+      console.log('Processing test mode webhook (query params):', { testOrderId, testStatus });
       orderId = testOrderId;
       status = testStatus === 'success' ? 'SUCCESS' : 'FAILED';
       isTestMode = true;
     } else {
-      // PRODUCTION MODE: Webhook from POST body
-      const payload: ShiprocketWebhookPayload = await req.json();
-      console.log('Processing Shiprocket webhook:', payload);
+      // POST body (test or production)
+      const payload: ShiprocketWebhookPayload & { test_mode?: boolean } = await req.json();
+      console.log('Processing webhook (POST):', payload);
       
       orderId = payload.order_id;
       status = payload.status;
+      isTestMode = payload.test_mode || false;
+      
+      if (isTestMode) {
+        console.log('TEST MODE: Processing test payment webhook');
+      }
     }
 
     if (!orderId) {
@@ -77,6 +82,18 @@ serve(async (req: Request) => {
 
     console.log(`Updating order ${orderId} with payment status: ${paymentStatus}`);
 
+    // Find order by payment_id (which stores the Shiprocket order_id)
+    const { data: existingOrder } = await supabaseClient
+      .from('orders')
+      .select('id, user_id')
+      .eq('payment_id', orderId)
+      .single();
+
+    if (!existingOrder) {
+      console.error('Order not found for payment_id:', orderId);
+      throw new Error('Order not found');
+    }
+
     // Update the order payment status
     const { error: updateError } = await supabaseClient
       .from('orders')
@@ -84,7 +101,7 @@ serve(async (req: Request) => {
         payment_status: paymentStatus,
         status: paymentStatus === 'paid' ? 'paid' : 'pending',
       })
-      .eq('id', orderId);
+      .eq('id', existingOrder.id);
 
     if (updateError) {
       console.error('Error updating order:', updateError);
@@ -92,24 +109,16 @@ serve(async (req: Request) => {
     }
 
     // If payment successful, clear the user's cart
-    if (paymentStatus === 'paid') {
-      const { data: order } = await supabaseClient
-        .from('orders')
-        .select('user_id')
-        .eq('id', orderId)
-        .single();
+    if (paymentStatus === 'paid' && existingOrder) {
+      const { error: cartError } = await supabaseClient
+        .from('cart_items')
+        .delete()
+        .eq('user_id', existingOrder.user_id);
 
-      if (order) {
-        const { error: cartError } = await supabaseClient
-          .from('cart_items')
-          .delete()
-          .eq('user_id', order.user_id);
-
-        if (cartError) {
-          console.error('Error clearing cart:', cartError);
-        } else {
-          console.log('Cart cleared for user:', order.user_id);
-        }
+      if (cartError) {
+        console.error('Error clearing cart:', cartError);
+      } else {
+        console.log('Cart cleared for user:', existingOrder.user_id);
       }
     }
 

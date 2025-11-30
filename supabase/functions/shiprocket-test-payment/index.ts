@@ -140,19 +140,39 @@ serve(async (req: Request) => {
 
       <script>
         function simulateSuccess() {
-          window.location.href = window.location.origin + '/functions/v1/shiprocket-webhook?' + 
-            'session_id=${sessionId}&' +
-            'order_id=${orderId}&' +
-            'status=success&' +
-            'payment_id=test_pay_' + Date.now();
+          // Call webhook with success status
+          fetch(window.location.origin + '/functions/v1/shiprocket-webhook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              order_id: '${orderId}',
+              cart_data: { items: [] },
+              status: 'SUCCESS',
+              payment_type: 'TEST',
+              total_amount_payable: ${amount},
+              test_mode: true
+            })
+          }).then(() => {
+            window.location.href = window.location.origin + '/order-history?payment=success';
+          });
         }
 
         function simulateFail() {
-          window.location.href = window.location.origin + '/functions/v1/shiprocket-webhook?' +
-            'session_id=${sessionId}&' +
-            'order_id=${orderId}&' +
-            'status=failed&' +
-            'reason=user_cancelled';
+          // Call webhook with failure status
+          fetch(window.location.origin + '/functions/v1/shiprocket-webhook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              order_id: '${orderId}',
+              cart_data: { items: [] },
+              status: 'FAILED',
+              payment_type: 'TEST',
+              total_amount_payable: ${amount},
+              test_mode: true
+            })
+          }).then(() => {
+            window.location.href = window.location.origin + '/order-history?payment=failed';
+          });
         }
       </script>
     </body>
