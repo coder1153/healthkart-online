@@ -17,3 +17,21 @@ verify_jwt = false
 
 [functions.admin-keys]
 verify_jwt = false
+
+[functions.shiprocket-catalog-products]
+verify_jwt = false
+
+[functions.shiprocket-catalog-products-by-collection]
+verify_jwt = false
+
+[functions.shiprocket-catalog-collections]
+verify_jwt = false
+
+[functions.shiprocket-sync-product]
+verify_jwt = true
+
+[functions.shiprocket-sync-collection]
+verify_jwt = true
+
+[functions.shiprocket-order-details]
+verify_jwt = true
