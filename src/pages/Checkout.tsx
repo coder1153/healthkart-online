@@ -177,22 +177,26 @@ const Checkout = () => {
         .update({ payment_id: tokenData.order_id })
         .eq('id', order.id);
 
-      // Show toast for test mode
+      // Handle test mode vs production mode
       if (tokenData.test_mode) {
         toast({
           title: "Test Mode Active",
           description: "You'll be redirected to a test payment page.",
         });
-      }
 
-      // Trigger Shiprocket Checkout
-      // @ts-ignore - HeadlessCheckout is loaded from external script
-      if (window.HeadlessCheckout) {
-        const fallbackUrl = `${window.location.origin}/checkout?order_id=${order.id}`;
-        // @ts-ignore
-        window.HeadlessCheckout.addToCart(e, tokenData.token, { fallbackUrl });
+        // Redirect to test payment page
+        const testPaymentUrl = `${window.location.origin}/functions/v1/shiprocket-test-payment?session_id=${tokenData.token}&order_id=${tokenData.order_id}&amount=${total.toFixed(2)}`;
+        window.location.href = testPaymentUrl;
       } else {
-        throw new Error('Shiprocket Checkout not loaded');
+        // Production mode: Trigger Shiprocket Checkout iframe
+        // @ts-ignore - HeadlessCheckout is loaded from external script
+        if (window.HeadlessCheckout) {
+          const fallbackUrl = `${window.location.origin}/order-history?order_id=${order.id}`;
+          // @ts-ignore
+          window.HeadlessCheckout.addToCart(e, tokenData.token, { fallbackUrl });
+        } else {
+          throw new Error('Shiprocket Checkout not loaded');
+        }
       }
     } catch (error: any) {
       console.error('Payment error:', error);

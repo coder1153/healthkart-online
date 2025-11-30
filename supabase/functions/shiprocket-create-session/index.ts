@@ -73,11 +73,12 @@ serve(async (req: Request) => {
     let orderId: string;
 
     if (isTestMode) {
-      // TEST MODE: Generate mock token
-      token = `test_token_${Date.now()}_${user.id}`;
+      // TEST MODE: Generate mock token and session ID
+      const sessionId = `test_session_${Date.now()}_${user.id}`;
       orderId = `test_order_${Date.now()}`;
+      token = sessionId; // Token acts as session ID in test mode
       
-      console.log('TEST MODE: Generated mock checkout token');
+      console.log('TEST MODE: Generated mock checkout session');
     } else {
       // PRODUCTION MODE: Call Shiprocket Access Token API
       const timestamp = new Date().toISOString();
