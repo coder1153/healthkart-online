@@ -30,10 +30,10 @@ export const Navbar = ({ cartItemsCount = 0 }: { cartItemsCount?: number }) => {
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2">
             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-              <span className="text-white font-bold text-lg">M</span>
+              <span className="text-white font-bold text-lg">P</span>
             </div>
             <span className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-              MediStore
+              Peony LifeStore
             </span>
           </Link>
 
