@@ -116,27 +116,24 @@ const Index = () => {
       >
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center text-white">
-            <h1 className="text-4xl md:text-6xl font-bold mb-6 animate-fade-in">
-              Your Health, Our Priority
+            <p className="text-lg md:text-xl mb-4 text-white/90 italic font-medium animate-fade-in">
+              "Gentle. Pure. Trusted."
+            </p>
+            <h1 className="text-4xl md:text-6xl font-bold mb-6 animate-fade-in" style={{ animationDelay: "0.1s" }}>
+              Care that feels personal. Quality that feels right.
             </h1>
-            <p className="text-lg md:text-xl mb-8 text-white/90">
-              Quality medicines and healthcare products delivered to your doorstep
+            <p className="text-lg md:text-xl mb-8 text-white/90 animate-fade-in" style={{ animationDelay: "0.2s" }}>
+              Welcome to Peony Life Sciences' online store, your trusted destination for safe, quality-assured pharmaceutical and wellness products. Every item listed here is carefully sourced, scientifically backed, and manufactured with strict quality standards to ensure your complete peace of mind.
             </p>
             <div className="flex gap-4 justify-center">
               <Button
                 size="lg"
                 variant="secondary"
                 onClick={() => navigate("/products")}
-                className="shadow-lg"
+                className="shadow-lg animate-fade-in"
+                style={{ animationDelay: "0.3s" }}
               >
-                Shop Now
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="bg-white/10 hover:bg-white/20 text-white border-white/30"
-              >
-                Learn More
+                Shop Our Products
               </Button>
             </div>
           </div>
@@ -146,27 +143,91 @@ const Index = () => {
       {/* Categories Section */}
       <section className="py-16 bg-muted/30">
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12">Shop by Category</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
-            {categories.map((category) => (
-              <CategoryCard
-                key={category.name}
-                {...category}
-                onClick={() => navigate("/products")}
-              />
-            ))}
+          <div className="max-w-4xl mx-auto text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-6">
+              Quality You Can Trust
+            </h2>
+            <p className="text-lg text-muted-foreground mb-4">
+              From essential medicines to healthy formulations and wellness solutions, each product reflects our commitment to purity, safety, and effectiveness.
+            </p>
+            <p className="text-lg text-muted-foreground">
+              We believe healthcare should be simple, reliable, and accessible, and our shop is designed to deliver exactly that.
+            </p>
+          </div>
+
+          <div className="text-center">
+            <h3 className="text-2xl md:text-3xl font-bold mb-4">
+              Choose What You Need, With Confidence
+            </h3>
+            <p className="text-lg text-muted-foreground max-w-3xl mx-auto mb-8">
+              Explore our wide range of products tailored to support better health for you and your family. Whether you're looking for daily wellness support, preventive solutions, or specialized formulations, we bring you trusted care at the best value.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Why Shop With Us Section */}
+      <section className="py-16 bg-background">
+        <div className="container mx-auto px-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">Why Shop With Us?</h2>
+          <div className="grid md:grid-cols-3 lg:grid-cols-5 gap-6 max-w-6xl mx-auto">
+            <div className="text-center p-6 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+              <div className="flex justify-center mb-4">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-2xl">✔</span>
+                </div>
+              </div>
+              <h3 className="font-semibold mb-2">Certified & Quality-Tested</h3>
+              <p className="text-sm text-muted-foreground">Products you can trust</p>
+            </div>
+            <div className="text-center p-6 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+              <div className="flex justify-center mb-4">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-2xl">✔</span>
+                </div>
+              </div>
+              <h3 className="font-semibold mb-2">Easy Browsing</h3>
+              <p className="text-sm text-muted-foreground">Fast checkout process</p>
+            </div>
+            <div className="text-center p-6 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+              <div className="flex justify-center mb-4">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-2xl">✔</span>
+                </div>
+              </div>
+              <h3 className="font-semibold mb-2">Transparent Details</h3>
+              <p className="text-sm text-muted-foreground">Clear benefits & info</p>
+            </div>
+            <div className="text-center p-6 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+              <div className="flex justify-center mb-4">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-2xl">✔</span>
+                </div>
+              </div>
+              <h3 className="font-semibold mb-2">Trusted by Professionals</h3>
+              <p className="text-sm text-muted-foreground">Clinic & expert approved</p>
+            </div>
+            <div className="text-center p-6 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+              <div className="flex justify-center mb-4">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-2xl">✔</span>
+                </div>
+              </div>
+              <h3 className="font-semibold mb-2">Dedicated Support</h3>
+              <p className="text-sm text-muted-foreground">For your wellness needs</p>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Featured Products */}
-      <section className="py-16">
+      <section className="py-16 bg-muted/30">
         <div className="container mx-auto px-4">
-          <div className="flex justify-between items-center mb-12">
-            <h2 className="text-3xl font-bold">Featured Products</h2>
-            <Button variant="ghost" onClick={() => navigate("/products")}>
-              View All →
-            </Button>
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">Premium Care, Delivered to You</h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Discover our carefully curated selection of premium healthcare products
+            </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {featuredProducts?.map((product) => (
@@ -191,9 +252,9 @@ const Index = () => {
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div>
-              <h3 className="font-bold text-lg mb-4">MediStore</h3>
+              <h3 className="font-bold text-lg mb-4">Peony LifeStore</h3>
               <p className="text-sm text-muted-foreground">
-                Your trusted partner for healthcare needs
+                Your trusted partner for gentle, pure, and trusted healthcare
               </p>
             </div>
             <div>
@@ -205,23 +266,23 @@ const Index = () => {
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">Categories</h4>
+              <h4 className="font-semibold mb-4">Products</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li>Medicines</li>
-                <li>Health Devices</li>
-                <li>Wellness</li>
+                <li>Wellness Solutions</li>
+                <li>Health Products</li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Contact</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>Email: support@medistore.com</li>
+                <li>Email: care@peonylife.com</li>
                 <li>Phone: +91 1234567890</li>
               </ul>
             </div>
           </div>
           <div className="mt-8 pt-8 border-t text-center text-sm text-muted-foreground">
-            © 2024 MediStore. All rights reserved.
+            © 2024 Peony Life Sciences. All rights reserved.
           </div>
         </div>
       </footer>
