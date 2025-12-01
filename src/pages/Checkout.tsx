@@ -200,9 +200,17 @@ const Checkout = () => {
       }
     } catch (error: any) {
       console.error('Payment error:', error);
+      
+      let errorMessage = error.message || "Failed to initiate payment";
+      
+      // Check if it's a Shiprocket catalog sync error
+      if (errorMessage.includes('Shiprocket')) {
+        errorMessage = "Products need to be synced with Shiprocket first. Please contact support.";
+      }
+      
       toast({
         title: "Payment Failed",
-        description: error.message || "Failed to initiate payment",
+        description: errorMessage,
         variant: "destructive",
       });
       setIsProcessing(false);

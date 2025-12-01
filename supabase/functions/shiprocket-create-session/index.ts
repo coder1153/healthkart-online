@@ -107,8 +107,17 @@ serve(async (req: Request) => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Shiprocket API error:', errorText);
-        throw new Error(`Shiprocket API error: ${response.statusText}`);
+        console.error('Shiprocket API error response:', errorText);
+        console.error('Request body:', bodyString);
+        
+        // Parse error message if available
+        try {
+          const errorData = JSON.parse(errorText);
+          const errorMsg = errorData?.error?.message || errorData?.message || response.statusText;
+          throw new Error(`Shiprocket Error: ${errorMsg}. This usually means products need to be synced with Shiprocket first. Please contact Shiprocket support to register your catalog endpoints.`);
+        } catch {
+          throw new Error(`Shiprocket API error: ${response.statusText}. Please ensure your products are registered with Shiprocket.`);
+        }
       }
 
       const data = await response.json();
