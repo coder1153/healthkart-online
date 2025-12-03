@@ -1,339 +1,524 @@
-import { Navbar } from "@/components/Navbar";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Navbar } from "@/components/Navbar";
+import { Loader2, CheckCircle2, Truck, CreditCard, Package, MapPin } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-// Load Shiprocket Checkout script
-const loadShiprocketScript = () => {
-  return new Promise((resolve, reject) => {
-    if (document.getElementById('shiprocket-checkout-script')) {
+// Load Razorpay script
+const loadRazorpayScript = (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    if (document.getElementById('razorpay-script')) {
       resolve(true);
       return;
     }
-
     const script = document.createElement('script');
-    script.id = 'shiprocket-checkout-script';
-    script.src = 'https://checkout-ui.shiprocket.com/assets/js/channels/shopify.js';
-    script.async = true;
+    script.id = 'razorpay-script';
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.onload = () => resolve(true);
-    script.onerror = () => reject(new Error('Failed to load Shiprocket script'));
+    script.onerror = () => resolve(false);
     document.body.appendChild(script);
   });
 };
 
+interface CourierOption {
+  courier_id: string;
+  courier_name: string;
+  rate: number;
+  estimated_days: number;
+  cod_available: boolean;
+  rating: number;
+}
+
+type CheckoutStep = 'address' | 'shipping' | 'payment' | 'confirmation';
+
 const Checkout = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  
   const [userId, setUserId] = useState<string | null>(null);
+  const [currentStep, setCurrentStep] = useState<CheckoutStep>('address');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [scriptLoaded, setScriptLoaded] = useState(false);
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  
+  // Form state
   const [formData, setFormData] = useState({
-    name: "",
-    phone: "",
-    address: "",
-    pincode: "",
-    city: "",
-    state: "",
+    name: '',
+    phone: '',
+    email: '',
+    address: '',
+    pincode: '',
+    city: '',
+    state: '',
   });
+  
+  // Shipping state
+  const [couriers, setCouriers] = useState<CourierOption[]>([]);
+  const [selectedCourier, setSelectedCourier] = useState<CourierOption | null>(null);
+  const [isCheckingServiceability, setIsCheckingServiceability] = useState(false);
+  const [serviceabilityError, setServiceabilityError] = useState<string | null>(null);
+  
+  // Order state
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [paymentId, setPaymentId] = useState<string | null>(null);
 
   useEffect(() => {
-    const checkUser = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        navigate("/auth");
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/auth');
         return;
       }
-      setUserId(data.session.user.id);
+      setUserId(session.user.id);
+      
+      // Pre-fill email
+      if (session.user.email) {
+        setFormData(prev => ({ ...prev, email: session.user.email || '' }));
+      }
     };
-    checkUser();
+    
+    checkAuth();
+    loadRazorpayScript().then(setRazorpayLoaded);
+  }, [navigate]);
 
-    // Load Shiprocket script
-    loadShiprocketScript()
-      .then(() => {
-        setScriptLoaded(true);
-        console.log('Shiprocket script loaded successfully');
-      })
-      .catch((error) => {
-        console.error('Error loading Shiprocket script:', error);
-        toast({
-          title: "Error",
-          description: "Failed to load payment system",
-          variant: "destructive",
-        });
-      });
-  }, [navigate, toast]);
-
-  const { data: cartItems } = useQuery({
-    queryKey: ["cart", userId],
+  // Fetch cart items
+  const { data: cartItems, isLoading: cartLoading } = useQuery({
+    queryKey: ['cart', userId],
     queryFn: async () => {
-      if (!userId) return [];
       const { data, error } = await supabase
-        .from("cart_items")
-        .select(`
-          *,
-          products (*)
-        `)
-        .eq("user_id", userId);
+        .from('cart_items')
+        .select('*, products(*)')
+        .eq('user_id', userId);
       if (error) throw error;
       return data;
     },
     enabled: !!userId,
   });
 
-  const subtotal = cartItems?.reduce(
-    (sum, item) => sum + (item.products ? Number(item.products.price) * item.quantity : 0),
-    0
-  ) || 0;
-  const tax = subtotal * 0.05;
-  const total = subtotal + tax;
+  const validCartItems = cartItems?.filter(item => item.products) || [];
+  const subtotal = validCartItems.reduce((sum, item) => sum + (item.products?.price || 0) * item.quantity, 0);
+  const shippingCost = selectedCourier?.rate || 0;
+  const tax = subtotal * 0.18;
+  const total = subtotal + tax + shippingCost;
 
-  const handlePayment = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  };
 
-    if (!scriptLoaded) {
-      toast({
-        title: "Error",
-        description: "Payment system not ready. Please refresh the page.",
-        variant: "destructive",
-      });
+  // Step 1: Check serviceability when pincode changes
+  const checkServiceability = async () => {
+    if (formData.pincode.length !== 6) {
+      setServiceabilityError('Please enter a valid 6-digit pincode');
       return;
     }
 
-    if (!userId || !cartItems || cartItems.length === 0) return;
+    setIsCheckingServiceability(true);
+    setServiceabilityError(null);
+    setCouriers([]);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      const response = await supabase.functions.invoke('shiprocket-check-serviceability', {
+        body: {
+          pickup_pincode: '110001', // Your warehouse pincode
+          delivery_pincode: formData.pincode,
+          weight: 0.5,
+          cod: false,
+        },
+      });
+
+      if (response.error) throw response.error;
+
+      const data = response.data;
+      if (data.serviceable && data.couriers?.length > 0) {
+        setCouriers(data.couriers);
+        setCurrentStep('shipping');
+      } else {
+        setServiceabilityError('Sorry, delivery is not available at this pincode');
+      }
+    } catch (error) {
+      console.error('Serviceability check error:', error);
+      setServiceabilityError('Unable to check delivery availability. Please try again.');
+    } finally {
+      setIsCheckingServiceability(false);
+    }
+  };
+
+  // Step 2: Proceed to payment
+  const proceedToPayment = () => {
+    if (!selectedCourier) {
+      toast({ title: "Please select a delivery option", variant: "destructive" });
+      return;
+    }
+    setCurrentStep('payment');
+  };
+
+  // Step 3: Create Razorpay order and process payment
+  const handlePayment = async () => {
+    if (!razorpayLoaded) {
+      toast({ title: "Payment system loading. Please wait.", variant: "destructive" });
+      return;
+    }
+
+    if (validCartItems.length === 0) {
+      toast({ title: "Your cart is empty", variant: "destructive" });
+      return;
+    }
 
     setIsProcessing(true);
 
     try {
-      // Create order first
-      const { data: order, error: orderError } = await supabase
-        .from("orders")
-        .insert({
-          user_id: userId,
-          total_amount: total,
-          status: "pending",
-          payment_status: "pending",
-          delivery_name: formData.name,
-          delivery_phone: formData.phone,
-          delivery_address: formData.address,
-          delivery_pincode: formData.pincode,
-          delivery_city: formData.city,
-          delivery_state: formData.state,
-        })
-        .select()
-        .single();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
 
-      if (orderError) throw orderError;
-
-      // Create order items
-      const orderItems = cartItems.map((item) => ({
-        order_id: order.id,
-        product_id: item.product_id,
-        product_name: item.products.name,
-        product_price: item.products.price,
-        quantity: item.quantity,
-      }));
-
-      const { error: itemsError } = await supabase.from("order_items").insert(orderItems);
-      if (itemsError) throw itemsError;
-
-      // Prepare cart items for Shiprocket
-      const shiprocketCartItems = cartItems.map((item) => ({
-        variant_id: item.products.id,
-        quantity: item.quantity,
-      }));
-
-      // Get redirect URL
-      const redirectUrl = `${window.location.origin}/order-history?order_id=${order.id}`;
-
-      // Generate checkout token
-      const { data: tokenData, error: tokenError } = await supabase.functions.invoke(
-        'shiprocket-create-session',
-        {
-          body: {
-            cartItems: shiprocketCartItems,
-            redirectUrl,
+      // Create Razorpay order via backend
+      const orderResponse = await supabase.functions.invoke('razorpay-create-order', {
+        body: {
+          amount: total,
+          currency: 'INR',
+          receipt: `order_${Date.now()}`,
+          customer: {
+            name: formData.name,
+            email: formData.email,
+            phone: formData.phone,
           },
-        }
-      );
+          shipping: {
+            address: formData.address,
+            city: formData.city,
+            state: formData.state,
+            pincode: formData.pincode,
+            courier_id: selectedCourier?.courier_id,
+            shipping_cost: shippingCost,
+          },
+          cart_items: validCartItems.map(item => ({
+            product_id: item.product_id,
+            product_name: item.products?.name || '',
+            quantity: item.quantity,
+            price: item.products?.price || 0,
+          })),
+        },
+      });
 
-      if (tokenError) throw tokenError;
+      if (orderResponse.error) throw orderResponse.error;
 
-      if (!tokenData.token) {
-        throw new Error('No checkout token received');
-      }
+      const orderData = orderResponse.data;
+      setOrderId(orderData.order_id);
 
-      console.log('Checkout token generated:', tokenData);
+      // Launch Razorpay checkout
+      const options: RazorpayOptions = {
+        key: orderData.razorpay_key_id,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: 'Peony LifeStore',
+        description: 'Order Payment',
+        order_id: orderData.razorpay_order_id,
+        handler: async (response: RazorpayResponse) => {
+          await verifyPayment(response, orderData.order_id);
+        },
+        prefill: {
+          name: formData.name,
+          email: formData.email,
+          contact: formData.phone,
+        },
+        theme: {
+          color: '#16a34a', // Green theme
+        },
+        modal: {
+          ondismiss: () => {
+            setIsProcessing(false);
+            toast({ title: "Payment cancelled", variant: "destructive" });
+          },
+        },
+      };
 
-      // Store order ID for webhook processing
-      await supabase
-        .from('orders')
-        .update({ payment_id: tokenData.order_id })
-        .eq('id', order.id);
-
-      // Handle test mode vs production mode
-      if (tokenData.test_mode) {
-        toast({
-          title: "Test Mode Active",
-          description: "You'll be redirected to a test payment page.",
-        });
-
-        // Redirect to test payment page
-        const testPaymentUrl = `${window.location.origin}/functions/v1/shiprocket-test-payment?session_id=${tokenData.token}&order_id=${tokenData.order_id}&amount=${total.toFixed(2)}`;
-        window.location.href = testPaymentUrl;
-      } else {
-        // Production mode: Trigger Shiprocket Checkout iframe
-        // @ts-ignore - HeadlessCheckout is loaded from external script
-        if (window.HeadlessCheckout) {
-          const fallbackUrl = `${window.location.origin}/order-history?order_id=${order.id}`;
-          // @ts-ignore
-          window.HeadlessCheckout.addToCart(e, tokenData.token, { fallbackUrl });
-        } else {
-          throw new Error('Shiprocket Checkout not loaded');
-        }
-      }
-    } catch (error: any) {
+      const razorpay = new window.Razorpay!(options);
+      razorpay.open();
+    } catch (error) {
       console.error('Payment error:', error);
-      
-      let errorMessage = error.message || "Failed to initiate payment";
-      
-      // Check if it's a Shiprocket catalog sync error
-      if (errorMessage.includes('Shiprocket')) {
-        errorMessage = "Products need to be synced with Shiprocket first. Please contact support.";
-      }
-      
       toast({
-        title: "Payment Failed",
-        description: errorMessage,
+        title: "Payment Error",
+        description: error instanceof Error ? error.message : "Failed to initiate payment",
         variant: "destructive",
       });
       setIsProcessing(false);
     }
   };
 
+  // Verify payment after Razorpay success
+  const verifyPayment = async (response: RazorpayResponse, dbOrderId: string) => {
+    try {
+      const verifyResponse = await supabase.functions.invoke('razorpay-verify-payment', {
+        body: {
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_signature: response.razorpay_signature,
+          order_id: dbOrderId,
+          shipping: {
+            courier_id: selectedCourier?.courier_id,
+            courier_name: selectedCourier?.courier_name,
+            shipping_cost: shippingCost,
+            estimated_days: selectedCourier?.estimated_days,
+          },
+        },
+      });
+
+      if (verifyResponse.error) throw verifyResponse.error;
+
+      setPaymentId(response.razorpay_payment_id);
+      setCurrentStep('confirmation');
+      toast({ title: "Payment successful!", description: "Your order has been placed." });
+    } catch (error) {
+      console.error('Payment verification error:', error);
+      toast({
+        title: "Payment Verification Failed",
+        description: "Please contact support with your payment details.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  if (cartLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <div className="flex items-center justify-center h-96">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      <Navbar cartItemsCount={cartItems?.length || 0} />
-      <input type="hidden" value={window.location.hostname} id="sellerDomain" />
-
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">Checkout</h1>
-
-        <form onSubmit={handlePayment} className="grid lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2">
-            <Card className="p-6">
-              <h2 className="text-xl font-bold mb-6">Delivery Information</h2>
-              <div className="grid gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name *</Label>
-                  <Input
-                    id="name"
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  />
+      <Navbar />
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        {/* Progress Steps */}
+        <div className="flex items-center justify-center mb-8">
+          <div className="flex items-center space-x-4">
+            {[
+              { step: 'address', label: 'Address', icon: MapPin },
+              { step: 'shipping', label: 'Shipping', icon: Truck },
+              { step: 'payment', label: 'Payment', icon: CreditCard },
+              { step: 'confirmation', label: 'Done', icon: CheckCircle2 },
+            ].map((s, i) => (
+              <div key={s.step} className="flex items-center">
+                <div className={`flex items-center justify-center w-10 h-10 rounded-full ${
+                  currentStep === s.step ? 'bg-primary text-primary-foreground' :
+                  ['address', 'shipping', 'payment', 'confirmation'].indexOf(currentStep) > i 
+                    ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+                }`}>
+                  <s.icon className="h-5 w-5" />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number *</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    required
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="address">Address *</Label>
-                  <Input
-                    id="address"
-                    required
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="pincode">Pincode *</Label>
-                    <Input
-                      id="pincode"
-                      required
-                      value={formData.pincode}
-                      onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="city">City *</Label>
-                    <Input
-                      id="city"
-                      required
-                      value={formData.city}
-                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="state">State *</Label>
-                  <Input
-                    id="state"
-                    required
-                    value={formData.state}
-                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                  />
-                </div>
+                <span className="ml-2 text-sm font-medium hidden sm:block">{s.label}</span>
+                {i < 3 && <div className="w-8 h-0.5 bg-muted mx-2" />}
               </div>
-            </Card>
+            ))}
           </div>
+        </div>
 
-          <div>
-            <Card className="p-6 sticky top-20">
-              <h2 className="text-xl font-bold mb-4">Order Summary</h2>
-              <div className="space-y-3 mb-6">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-medium">₹{subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Tax (5%)</span>
-                  <span className="font-medium">₹{tax.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Shipping</span>
-                  <span className="font-medium">Free</span>
-                </div>
-                <div className="border-t pt-3">
-                  <div className="flex justify-between text-lg font-bold">
-                    <span>Total</span>
-                    <span className="text-primary">₹{total.toFixed(2)}</span>
-                  </div>
-                </div>
+        {/* Step 1: Address Form */}
+        {currentStep === 'address' && (
+          <div className="bg-card rounded-lg p-6 shadow-sm">
+            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
+              <MapPin className="h-5 w-5 text-primary" />
+              Delivery Address
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="name">Full Name *</Label>
+                <Input id="name" name="name" value={formData.name} onChange={handleInputChange} required />
               </div>
-              <Button
-                type="submit"
-                className="w-full bg-gradient-to-r from-primary to-secondary"
-                disabled={!cartItems || cartItems.length === 0 || isProcessing || !scriptLoaded}
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  "Checkout with Shiprocket"
-                )}
+              <div>
+                <Label htmlFor="phone">Phone Number *</Label>
+                <Input id="phone" name="phone" value={formData.phone} onChange={handleInputChange} required />
+              </div>
+              <div className="md:col-span-2">
+                <Label htmlFor="email">Email *</Label>
+                <Input id="email" name="email" type="email" value={formData.email} onChange={handleInputChange} required />
+              </div>
+              <div className="md:col-span-2">
+                <Label htmlFor="address">Address *</Label>
+                <Input id="address" name="address" value={formData.address} onChange={handleInputChange} required />
+              </div>
+              <div>
+                <Label htmlFor="pincode">Pincode *</Label>
+                <Input id="pincode" name="pincode" value={formData.pincode} onChange={handleInputChange} maxLength={6} required />
+              </div>
+              <div>
+                <Label htmlFor="city">City *</Label>
+                <Input id="city" name="city" value={formData.city} onChange={handleInputChange} required />
+              </div>
+              <div className="md:col-span-2">
+                <Label htmlFor="state">State *</Label>
+                <Input id="state" name="state" value={formData.state} onChange={handleInputChange} required />
+              </div>
+            </div>
+
+            {serviceabilityError && (
+              <p className="text-destructive text-sm mt-4">{serviceabilityError}</p>
+            )}
+
+            <Button 
+              onClick={checkServiceability} 
+              className="w-full mt-6"
+              disabled={!formData.name || !formData.phone || !formData.address || !formData.pincode || !formData.city || !formData.state || isCheckingServiceability}
+            >
+              {isCheckingServiceability ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Checking Delivery...</>
+              ) : (
+                'Check Delivery & Continue'
+              )}
+            </Button>
+          </div>
+        )}
+
+        {/* Step 2: Shipping Options */}
+        {currentStep === 'shipping' && (
+          <div className="bg-card rounded-lg p-6 shadow-sm">
+            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
+              <Truck className="h-5 w-5 text-primary" />
+              Select Delivery Option
+            </h2>
+            
+            <RadioGroup value={selectedCourier?.courier_id} onValueChange={(value) => {
+              const courier = couriers.find(c => c.courier_id === value);
+              setSelectedCourier(courier || null);
+            }}>
+              <div className="space-y-3">
+                {couriers.map((courier) => (
+                  <div 
+                    key={courier.courier_id}
+                    className={`flex items-center justify-between p-4 border rounded-lg cursor-pointer transition-colors ${
+                      selectedCourier?.courier_id === courier.courier_id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                    }`}
+                    onClick={() => setSelectedCourier(courier)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <RadioGroupItem value={courier.courier_id} id={courier.courier_id} />
+                      <div>
+                        <p className="font-medium">{courier.courier_name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Estimated delivery: {courier.estimated_days} days
+                        </p>
+                      </div>
+                    </div>
+                    <span className="font-semibold text-primary">₹{courier.rate.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            </RadioGroup>
+
+            <div className="flex gap-4 mt-6">
+              <Button variant="outline" onClick={() => setCurrentStep('address')}>Back</Button>
+              <Button onClick={proceedToPayment} className="flex-1" disabled={!selectedCourier}>
+                Continue to Payment
               </Button>
-              <p className="text-xs text-muted-foreground text-center mt-4">
-                Secure payment via Shiprocket Checkout
-              </p>
-            </Card>
+            </div>
           </div>
-        </form>
+        )}
+
+        {/* Step 3: Payment */}
+        {currentStep === 'payment' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Order Summary */}
+            <div className="bg-card rounded-lg p-6 shadow-sm">
+              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                <Package className="h-5 w-5 text-primary" />
+                Order Summary
+              </h2>
+              <div className="space-y-3 mb-4">
+                {validCartItems.map((item) => (
+                  <div key={item.id} className="flex justify-between text-sm">
+                    <span>{item.products?.name} × {item.quantity}</span>
+                    <span>₹{((item.products?.price || 0) * item.quantity).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Subtotal</span>
+                  <span>₹{subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Tax (18%)</span>
+                  <span>₹{tax.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Shipping ({selectedCourier?.courier_name})</span>
+                  <span>₹{shippingCost.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-semibold text-lg border-t pt-2">
+                  <span>Total</span>
+                  <span className="text-primary">₹{total.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Delivery Info & Payment */}
+            <div className="bg-card rounded-lg p-6 shadow-sm">
+              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                <CreditCard className="h-5 w-5 text-primary" />
+                Payment
+              </h2>
+              
+              <div className="mb-6 p-4 bg-muted rounded-lg">
+                <h3 className="font-medium mb-2">Delivery Address</h3>
+                <p className="text-sm text-muted-foreground">
+                  {formData.name}<br />
+                  {formData.address}<br />
+                  {formData.city}, {formData.state} - {formData.pincode}<br />
+                  Phone: {formData.phone}
+                </p>
+              </div>
+
+              <div className="flex gap-4">
+                <Button variant="outline" onClick={() => setCurrentStep('shipping')}>Back</Button>
+                <Button onClick={handlePayment} className="flex-1" disabled={isProcessing}>
+                  {isProcessing ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...</>
+                  ) : (
+                    `Pay ₹${total.toFixed(2)}`
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Confirmation */}
+        {currentStep === 'confirmation' && (
+          <div className="bg-card rounded-lg p-8 shadow-sm text-center">
+            <CheckCircle2 className="h-16 w-16 text-primary mx-auto mb-4" />
+            <h2 className="text-2xl font-semibold mb-2">Order Confirmed!</h2>
+            <p className="text-muted-foreground mb-6">
+              Thank you for your order. You will receive a confirmation email shortly.
+            </p>
+            
+            <div className="bg-muted p-4 rounded-lg mb-6 text-left max-w-md mx-auto">
+              <p className="text-sm"><strong>Order ID:</strong> {orderId}</p>
+              <p className="text-sm"><strong>Payment ID:</strong> {paymentId}</p>
+              <p className="text-sm"><strong>Amount Paid:</strong> ₹{total.toFixed(2)}</p>
+            </div>
+
+            <div className="flex gap-4 justify-center">
+              <Button variant="outline" onClick={() => navigate('/order-history')}>
+                View Orders
+              </Button>
+              <Button onClick={() => navigate('/products')}>
+                Continue Shopping
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

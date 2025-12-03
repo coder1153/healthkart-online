@@ -1,5 +1,20 @@
 project_id = "rmnllpfeapndymmsqsnc"
 
+[functions.razorpay-create-order]
+verify_jwt = true
+
+[functions.razorpay-verify-payment]
+verify_jwt = true
+
+[functions.razorpay-webhook]
+verify_jwt = false
+
+[functions.shiprocket-check-serviceability]
+verify_jwt = true
+
+[functions.shiprocket-create-shipment]
+verify_jwt = true
+
 [functions.shiprocket-create-session]
 verify_jwt = true
 
