@@ -3,30 +3,67 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Eye, EyeOff, Loader2, Mail, Lock, Leaf, ShieldCheck, Truck, Heart } from "lucide-react";
+import { z } from "zod";
+
+const emailSchema = z.string().email("Please enter a valid email address");
+const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 
 const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [isLogin, setIsLogin] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string; confirmPassword?: string }>({});
 
   useEffect(() => {
-    const checkUser = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
         navigate("/");
       }
-    };
-    checkUser();
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        navigate("/");
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, [navigate]);
+
+  const validateForm = () => {
+    const newErrors: { email?: string; password?: string; confirmPassword?: string } = {};
+    
+    const emailResult = emailSchema.safeParse(email);
+    if (!emailResult.success) {
+      newErrors.email = emailResult.error.errors[0].message;
+    }
+
+    const passwordResult = passwordSchema.safeParse(password);
+    if (!passwordResult.success) {
+      newErrors.password = passwordResult.error.errors[0].message;
+    }
+
+    if (!isLogin && password !== confirmPassword) {
+      newErrors.confirmPassword = "Passwords do not match";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) return;
     setLoading(true);
 
     try {
@@ -38,15 +75,23 @@ const Auth = () => {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        if (error.message.includes("already registered")) {
+          throw new Error("This email is already registered. Please login instead.");
+        }
+        throw error;
+      }
 
       toast({
-        title: "Success!",
-        description: "Account created successfully. You can now login.",
+        title: "Account created!",
+        description: "You can now login with your credentials.",
       });
+      setIsLogin(true);
+      setPassword("");
+      setConfirmPassword("");
     } catch (error: any) {
       toast({
-        title: "Error",
+        title: "Sign up failed",
         description: error.message,
         variant: "destructive",
       });
@@ -57,23 +102,91 @@ const Auth = () => {
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) return;
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        if (error.message.includes("Invalid login credentials")) {
+          throw new Error("Invalid email or password. Please try again.");
+        }
+        throw error;
+      }
 
       toast({
         title: "Welcome back!",
         description: "You have successfully logged in.",
       });
-
-      // Regular users go to home page
       navigate("/");
+    } catch (error: any) {
+      toast({
+        title: "Login failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/`,
+        },
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      toast({
+        title: "Google sign in failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      toast({
+        title: "Email required",
+        description: "Please enter your email address first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const emailResult = emailSchema.safeParse(email);
+    if (!emailResult.success) {
+      toast({
+        title: "Invalid email",
+        description: "Please enter a valid email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth`,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Password reset email sent",
+        description: "Check your inbox for a password reset link.",
+      });
     } catch (error: any) {
       toast({
         title: "Error",
@@ -86,87 +199,269 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-            <span className="text-white font-bold text-2xl">M</span>
+    <div className="min-h-screen flex">
+      {/* Left Panel - Branding */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-primary via-primary/90 to-primary/80 overflow-hidden">
+        {/* Abstract Pattern Background */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-white rounded-full blur-3xl" />
+          <div className="absolute bottom-20 right-10 w-96 h-96 bg-white rounded-full blur-3xl" />
+          <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-white rounded-full blur-3xl" />
+        </div>
+        
+        {/* Leaf Pattern */}
+        <div className="absolute inset-0 opacity-5">
+          {[...Array(20)].map((_, i) => (
+            <Leaf 
+              key={i}
+              className="absolute text-white"
+              style={{
+                top: `${Math.random() * 100}%`,
+                left: `${Math.random() * 100}%`,
+                transform: `rotate(${Math.random() * 360}deg)`,
+                width: `${20 + Math.random() * 40}px`,
+                height: `${20 + Math.random() * 40}px`,
+              }}
+            />
+          ))}
+        </div>
+
+        <div className="relative z-10 flex flex-col justify-center px-12 xl:px-20 text-white">
+          {/* Logo */}
+          <div className="flex items-center gap-3 mb-12">
+            <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
+              <Leaf className="w-8 h-8 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Peony LifeStore</h1>
+              <p className="text-white/70 text-sm">Gentle. Pure. Trusted.</p>
+            </div>
           </div>
-          <CardTitle className="text-2xl">Welcome to MediStore</CardTitle>
-          <CardDescription>Sign in to your account or create a new one</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="signin" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
-            </TabsList>
-            <TabsContent value="signin">
-              <form onSubmit={handleSignIn} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+
+          {/* Headline */}
+          <h2 className="text-4xl xl:text-5xl font-bold leading-tight mb-6">
+            Your Wellness Journey<br />Starts Here
+          </h2>
+          <p className="text-lg text-white/80 mb-12 max-w-md">
+            Access quality-assured pharmaceutical and wellness products, trusted by thousands of families across India.
+          </p>
+
+          {/* Features */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <span className="text-white/90">Certified & Quality-Tested Products</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
+                <Truck className="w-5 h-5" />
+              </div>
+              <span className="text-white/90">Fast & Reliable Delivery</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
+                <Heart className="w-5 h-5" />
+              </div>
+              <span className="text-white/90">Dedicated Wellness Support</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Right Panel - Form */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 bg-background">
+        <div className="w-full max-w-md">
+          {/* Mobile Logo */}
+          <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
+            <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
+              <Leaf className="w-7 h-7 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-foreground">Peony LifeStore</h1>
+              <p className="text-muted-foreground text-xs">Gentle. Pure. Trusted.</p>
+            </div>
+          </div>
+
+          {/* Form Card */}
+          <div className="bg-card rounded-2xl shadow-xl border border-border/50 p-8 backdrop-blur-sm">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold text-foreground">
+                {isLogin ? "Welcome Back" : "Create Account"}
+              </h2>
+              <p className="text-muted-foreground mt-2">
+                {isLogin 
+                  ? "Sign in to access your wellness dashboard" 
+                  : "Join thousands of happy customers"}
+              </p>
+            </div>
+
+            {/* Google Sign In */}
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-12 mb-6 gap-3 text-foreground border-border hover:bg-accent"
+              onClick={handleGoogleSignIn}
+              disabled={googleLoading}
+            >
+              {googleLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path
+                    fill="currentColor"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  />
+                  <path
+                    fill="currentColor"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  />
+                  <path
+                    fill="currentColor"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                  />
+                  <path
+                    fill="currentColor"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                  />
+                </svg>
+              )}
+              Continue with Google
+            </Button>
+
+            {/* Divider */}
+            <div className="relative mb-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-card text-muted-foreground">or continue with email</span>
+              </div>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={isLogin ? handleSignIn : handleSignUp} className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-foreground">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
                     placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    className={`pl-10 h-12 ${errors.email ? 'border-destructive' : ''}`}
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-foreground">Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
                     id="password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    className={`pl-10 pr-10 h-12 ${errors.password ? 'border-destructive' : ''}`}
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Signing in..." : "Sign In"}
-                </Button>
-              </form>
-            </TabsContent>
-            <TabsContent value="signup">
-              <form onSubmit={handleSignUp} className="space-y-4">
+                {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+              </div>
+
+              {!isLogin && (
                 <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
-                  <Input
-                    id="signup-email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
+                  <Label htmlFor="confirmPassword" className="text-foreground">Confirm Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className={`pl-10 pr-10 h-12 ${errors.confirmPassword ? 'border-destructive' : ''}`}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword}</p>}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
-                  <Input
-                    id="signup-password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
+              )}
+
+              {isLogin && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </button>
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Creating account..." : "Sign Up"}
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
-          <div className="mt-4 text-center">
-            <Button variant="link" onClick={() => navigate("/")}>
-              Back to Home
-            </Button>
+              )}
+
+              <Button type="submit" className="w-full h-12 text-base" disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    {isLogin ? "Signing in..." : "Creating account..."}
+                  </>
+                ) : (
+                  isLogin ? "Sign In" : "Create Account"
+                )}
+              </Button>
+            </form>
+
+            {/* Toggle Login/Signup */}
+            <p className="text-center text-muted-foreground mt-6">
+              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setErrors({});
+                  setPassword("");
+                  setConfirmPassword("");
+                }}
+                className="text-primary font-medium hover:underline"
+              >
+                {isLogin ? "Sign up" : "Login"}
+              </button>
+            </p>
           </div>
-        </CardContent>
-      </Card>
+
+          {/* Back to Home */}
+          <div className="text-center mt-6">
+            <button
+              onClick={() => navigate("/")}
+              className="text-muted-foreground hover:text-foreground text-sm"
+            >
+              ← Back to Home
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
