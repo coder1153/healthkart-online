@@ -10,22 +10,6 @@ import { Navbar } from "@/components/Navbar";
 import { Loader2, CheckCircle2, Truck, CreditCard, Package, MapPin } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-// Load Razorpay script
-const loadRazorpayScript = (): Promise<boolean> => {
-  return new Promise((resolve) => {
-    if (document.getElementById('razorpay-script')) {
-      resolve(true);
-      return;
-    }
-    const script = document.createElement('script');
-    script.id = 'razorpay-script';
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
-};
-
 interface CourierOption {
   courier_id: string;
   courier_name: string;
@@ -44,7 +28,6 @@ const Checkout = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('address');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -83,7 +66,6 @@ const Checkout = () => {
     };
     
     checkAuth();
-    loadRazorpayScript().then(setRazorpayLoaded);
   }, [navigate]);
 
   // Fetch cart items
@@ -160,13 +142,8 @@ const Checkout = () => {
     setCurrentStep('payment');
   };
 
-  // Step 3: Create Razorpay order and process payment
+  // Step 3: Process payment - PhonePe integration placeholder
   const handlePayment = async () => {
-    if (!razorpayLoaded) {
-      toast({ title: "Payment system loading. Please wait.", variant: "destructive" });
-      return;
-    }
-
     if (validCartItems.length === 0) {
       toast({ title: "Your cart is empty", variant: "destructive" });
       return;
@@ -175,110 +152,17 @@ const Checkout = () => {
     setIsProcessing(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
-
-      // Create Razorpay order via backend
-      const orderResponse = await supabase.functions.invoke('razorpay-create-order', {
-        body: {
-          amount: total,
-          currency: 'INR',
-          receipt: `order_${Date.now()}`,
-          customer: {
-            name: formData.name,
-            email: formData.email,
-            phone: formData.phone,
-          },
-          shipping: {
-            address: formData.address,
-            city: formData.city,
-            state: formData.state,
-            pincode: formData.pincode,
-            courier_id: selectedCourier?.courier_id,
-            shipping_cost: shippingCost,
-          },
-          cart_items: validCartItems.map(item => ({
-            product_id: item.product_id,
-            product_name: item.products?.name || '',
-            quantity: item.quantity,
-            price: item.products?.price || 0,
-          })),
-        },
+      // TODO: PhonePe payment integration will be added here
+      toast({
+        title: "Payment Integration Pending",
+        description: "PhonePe payment integration coming soon.",
+        variant: "destructive",
       });
-
-      if (orderResponse.error) throw orderResponse.error;
-
-      const orderData = orderResponse.data;
-      setOrderId(orderData.order_id);
-
-      // Launch Razorpay checkout
-      const options: RazorpayOptions = {
-        key: orderData.razorpay_key_id,
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: 'Peony LifeStore',
-        description: 'Order Payment',
-        order_id: orderData.razorpay_order_id,
-        handler: async (response: RazorpayResponse) => {
-          await verifyPayment(response, orderData.order_id);
-        },
-        prefill: {
-          name: formData.name,
-          email: formData.email,
-          contact: formData.phone,
-        },
-        theme: {
-          color: '#16a34a', // Green theme
-        },
-        modal: {
-          ondismiss: () => {
-            setIsProcessing(false);
-            toast({ title: "Payment cancelled", variant: "destructive" });
-          },
-        },
-      };
-
-      const razorpay = new window.Razorpay!(options);
-      razorpay.open();
     } catch (error) {
       console.error('Payment error:', error);
       toast({
         title: "Payment Error",
         description: error instanceof Error ? error.message : "Failed to initiate payment",
-        variant: "destructive",
-      });
-      setIsProcessing(false);
-    }
-  };
-
-  // Verify payment after Razorpay success
-  const verifyPayment = async (response: RazorpayResponse, dbOrderId: string) => {
-    try {
-      const verifyResponse = await supabase.functions.invoke('razorpay-verify-payment', {
-        body: {
-          razorpay_order_id: response.razorpay_order_id,
-          razorpay_payment_id: response.razorpay_payment_id,
-          razorpay_signature: response.razorpay_signature,
-          order_id: dbOrderId,
-          shipping: {
-            courier_id: selectedCourier?.courier_id,
-            courier_name: selectedCourier?.courier_name,
-            shipping_cost: shippingCost,
-            estimated_days: selectedCourier?.estimated_days,
-          },
-        },
-      });
-
-      if (verifyResponse.error) throw verifyResponse.error;
-
-      setPaymentId(response.razorpay_payment_id);
-      setCurrentStep('confirmation');
-      toast({ title: "Payment successful!", description: "Your order has been placed." });
-    } catch (error) {
-      console.error('Payment verification error:', error);
-      toast({
-        title: "Payment Verification Failed",
-        description: "Please contact support with your payment details.",
         variant: "destructive",
       });
     } finally {
@@ -470,7 +354,7 @@ const Checkout = () => {
                 Payment
               </h2>
               
-              <div className="mb-6 p-4 bg-muted rounded-lg">
+              <div className="mb-6 p-4 bg-muted/50 rounded-lg">
                 <h3 className="font-medium mb-2">Delivery Address</h3>
                 <p className="text-sm text-muted-foreground">
                   {formData.name}<br />
@@ -480,9 +364,15 @@ const Checkout = () => {
                 </p>
               </div>
 
-              <div className="flex gap-4">
-                <Button variant="outline" onClick={() => setCurrentStep('shipping')}>Back</Button>
-                <Button onClick={handlePayment} className="flex-1" disabled={isProcessing}>
+              <div className="space-y-4">
+                <Button variant="outline" onClick={() => setCurrentStep('shipping')} className="w-full">
+                  Back to Shipping
+                </Button>
+                <Button 
+                  onClick={handlePayment} 
+                  className="w-full"
+                  disabled={isProcessing}
+                >
                   {isProcessing ? (
                     <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...</>
                   ) : (
@@ -500,13 +390,15 @@ const Checkout = () => {
             <CheckCircle2 className="h-16 w-16 text-primary mx-auto mb-4" />
             <h2 className="text-2xl font-semibold mb-2">Order Confirmed!</h2>
             <p className="text-muted-foreground mb-6">
-              Thank you for your order. You will receive a confirmation email shortly.
+              Thank you for your order. We'll send you a confirmation email shortly.
             </p>
             
-            <div className="bg-muted p-4 rounded-lg mb-6 text-left max-w-md mx-auto">
+            <div className="bg-muted/50 rounded-lg p-4 mb-6 text-left max-w-md mx-auto">
               <p className="text-sm"><strong>Order ID:</strong> {orderId}</p>
-              <p className="text-sm"><strong>Payment ID:</strong> {paymentId}</p>
-              <p className="text-sm"><strong>Amount Paid:</strong> ₹{total.toFixed(2)}</p>
+              {paymentId && <p className="text-sm"><strong>Payment ID:</strong> {paymentId}</p>}
+              <p className="text-sm"><strong>Total Paid:</strong> ₹{total.toFixed(2)}</p>
+              <p className="text-sm"><strong>Shipping:</strong> {selectedCourier?.courier_name}</p>
+              <p className="text-sm"><strong>Estimated Delivery:</strong> {selectedCourier?.estimated_days} days</p>
             </div>
 
             <div className="flex gap-4 justify-center">
