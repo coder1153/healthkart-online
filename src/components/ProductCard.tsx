@@ -28,12 +28,12 @@ export const ProductCard = ({
   return (
     <Card className="group overflow-hidden transition-all hover:shadow-lg border-border/50">
       <Link to={`/product/${id}`}>
-        <div className="aspect-square overflow-hidden bg-muted/30">
+      <div className="aspect-square overflow-hidden bg-muted/30 p-4 flex items-center justify-center">
           {image_url ? (
             <img
               src={image_url}
               alt={name}
-              className="h-full w-full object-cover transition-transform group-hover:scale-105"
+              className="max-h-full max-w-full object-contain transition-transform group-hover:scale-105"
             />
           ) : (
             <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-primary/5 to-secondary/5">

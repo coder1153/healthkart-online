@@ -4,8 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Star } from "lucide-react";
+import { Star, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Progress } from "@/components/ui/progress";
 
 interface ProductReviewsProps {
   productId: string;
@@ -69,32 +70,54 @@ export const ProductReviews = ({ productId }: ProductReviewsProps) => {
     ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
     : "0.0";
 
+  // Calculate rating distribution
+  const ratingDistribution = [5, 4, 3, 2, 1].map((star) => {
+    const count = reviews?.filter((r) => r.rating === star).length || 0;
+    const percentage = reviews?.length ? (count / reviews.length) * 100 : 0;
+    return { star, count, percentage };
+  });
+
   return (
     <div className="mt-12">
       <h2 className="text-2xl font-bold mb-6">Customer Reviews</h2>
       
-      <div className="mb-8">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-4xl font-bold">{avgRating}</span>
-          <div>
-            <div className="flex">
+      {/* Rating Summary */}
+      <Card className="p-6 mb-8 bg-gradient-to-br from-primary/5 to-secondary/5">
+        <div className="flex flex-col md:flex-row gap-8">
+          {/* Average Rating */}
+          <div className="flex flex-col items-center justify-center min-w-[140px]">
+            <span className="text-5xl font-bold text-primary">{avgRating}</span>
+            <div className="flex mt-2">
               {[...Array(5)].map((_, i) => (
                 <Star
                   key={i}
                   className={`h-5 w-5 ${
                     i < Math.round(Number(avgRating))
                       ? "fill-yellow-400 text-yellow-400"
-                      : "text-muted"
+                      : "text-muted-foreground/30"
                   }`}
                 />
               ))}
             </div>
-            <p className="text-sm text-muted-foreground">
-              {reviews?.length || 0} reviews
+            <p className="text-sm text-muted-foreground mt-1">
+              Based on {reviews?.length || 0} reviews
             </p>
           </div>
+
+          {/* Rating Distribution */}
+          <div className="flex-1 space-y-2">
+            {ratingDistribution.map(({ star, count, percentage }) => (
+              <div key={star} className="flex items-center gap-3">
+                <span className="text-sm font-medium w-12 flex items-center gap-1">
+                  {star} <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                </span>
+                <Progress value={percentage} className="h-2 flex-1" />
+                <span className="text-sm text-muted-foreground w-8">{count}</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      </Card>
 
       {userId && (
         <Card className="p-6 mb-8 bg-muted/30">
@@ -141,27 +164,46 @@ export const ProductReviews = ({ productId }: ProductReviewsProps) => {
         </Card>
       )}
 
+      {/* Reviews List */}
       <div className="space-y-4">
+        {reviews?.length === 0 && (
+          <Card className="p-8 text-center">
+            <p className="text-muted-foreground">No reviews yet. Be the first to review this product!</p>
+          </Card>
+        )}
         {reviews?.map((review) => (
-          <Card key={review.id} className="p-6">
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex gap-1">
-                {[...Array(5)].map((_, i) => (
-                  <Star
-                    key={i}
-                    className={`h-4 w-4 ${
-                      i < review.rating
-                        ? "fill-yellow-400 text-yellow-400"
-                        : "text-muted"
-                    }`}
-                  />
-                ))}
+          <Card key={review.id} className="p-6 hover:shadow-md transition-shadow">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <User className="h-5 w-5 text-primary" />
               </div>
-              <span className="text-sm text-muted-foreground">
-                {new Date(review.created_at).toLocaleDateString()}
-              </span>
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex gap-1">
+                    {[...Array(5)].map((_, i) => (
+                      <Star
+                        key={i}
+                        className={`h-4 w-4 ${
+                          i < review.rating
+                            ? "fill-yellow-400 text-yellow-400"
+                            : "text-muted-foreground/30"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    {new Date(review.created_at).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </span>
+                </div>
+                {review.comment && (
+                  <p className="text-muted-foreground leading-relaxed">{review.comment}</p>
+                )}
+              </div>
             </div>
-            {review.comment && <p className="text-muted-foreground">{review.comment}</p>}
           </Card>
         ))}
       </div>
