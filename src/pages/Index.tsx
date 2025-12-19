@@ -250,34 +250,52 @@ const Index = () => {
       {/* Footer */}
       <footer className="bg-card border-t py-12">
         <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div>
-              <h3 className="font-bold text-lg mb-4">Peony LifeStore</h3>
+              <h3 className="font-bold text-lg mb-4">
+                <a
+                  href="https://peonylifesciences.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-foreground transition-colors">Peony Life Sciences</a>
+              </h3>
               <p className="text-sm text-muted-foreground">
-                Your trusted partner for gentle, pure, and trusted healthcare
+                Leading pharmaceutical innovation with world-class quality standards, delivering life-saving medicines to patients globally through cutting-edge research and manufacturing excellence.
               </p>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Quick Links</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>About Us</li>
-                <li>Contact</li>
-                <li>Privacy Policy</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold mb-4">Products</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>Medicines</li>
-                <li>Wellness Solutions</li>
-                <li>Health Products</li>
+                <li><a
+                  href="https://peonylifesciences.com/about"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-foreground transition-colors">About Us</a></li>
+
+                <li> <a
+                  href="https://peonylifesciences.com/contact"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-foreground transition-colors"
+                >Contact</a></li>
+                <li>
+                  <a
+                    href="https://terms.peonylifesciences.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-foreground transition-colors"
+                  >
+                    Privacy Policy
+                  </a>
+                </li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Contact</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>Email: care@peonylife.com</li>
-                <li>Phone: +91 1234567890</li>
+                <li>Email: support@peonylifesciences.com
+                </li>
+                <li>Phone: +91 70109 66990</li>
               </ul>
             </div>
           </div>
