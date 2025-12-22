@@ -1,13 +1,25 @@
-import { ShoppingCart, Heart, User, Search, Menu, ShieldCheck } from "lucide-react";
+import { ShoppingCart, Heart, User, Search, Menu, ShieldCheck, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { getAdminSession } from "@/lib/adminAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const Navbar = ({ cartItemsCount = 0 }: { cartItemsCount?: number }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     const checkAdminSession = () => {
@@ -20,8 +32,37 @@ export const Navbar = ({ cartItemsCount = 0 }: { cartItemsCount?: number }) => {
     // Check every minute if admin session is still valid
     const interval = setInterval(checkAdminSession, 60000);
     
-    return () => clearInterval(interval);
+    // Check user auth state
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => {
+      clearInterval(interval);
+      subscription.unsubscribe();
+    };
   }, []);
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out.",
+      });
+      navigate("/");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -58,11 +99,37 @@ export const Navbar = ({ cartItemsCount = 0 }: { cartItemsCount?: number }) => {
                 </Link>
               </Button>
             )}
-            <Button variant="ghost" size="icon" asChild>
-              <Link to="/auth">
-                <User className="h-5 w-5" />
-              </Link>
-            </Button>
+            {user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <User className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem className="text-sm text-muted-foreground cursor-default">
+                    {user.email}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link to="/order-history" className="w-full cursor-pointer">
+                      Order History
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer">
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button variant="ghost" size="icon" asChild>
+                <Link to="/auth">
+                  <User className="h-5 w-5" />
+                </Link>
+              </Button>
+            )}
             <Button variant="ghost" size="icon">
               <Heart className="h-5 w-5" />
             </Button>
@@ -100,7 +167,7 @@ export const Navbar = ({ cartItemsCount = 0 }: { cartItemsCount?: number }) => {
                 className="pl-10 w-full"
               />
             </div>
-            <div className="flex justify-around">
+            <div className="flex flex-wrap justify-around gap-2">
               {isAdmin && (
                 <Button variant="ghost" size="sm" asChild>
                   <Link to="/admin">
@@ -109,12 +176,27 @@ export const Navbar = ({ cartItemsCount = 0 }: { cartItemsCount?: number }) => {
                   </Link>
                 </Button>
               )}
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/auth">
-                  <User className="h-4 w-4 mr-2" />
-                  Account
-                </Link>
-              </Button>
+              {user ? (
+                <>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link to="/order-history">
+                      <User className="h-4 w-4 mr-2" />
+                      Orders
+                    </Link>
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={handleLogout}>
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Logout
+                  </Button>
+                </>
+              ) : (
+                <Button variant="ghost" size="sm" asChild>
+                  <Link to="/auth">
+                    <User className="h-4 w-4 mr-2" />
+                    Login
+                  </Link>
+                </Button>
+              )}
               <Button variant="ghost" size="sm">
                 <Heart className="h-4 w-4 mr-2" />
                 Wishlist
