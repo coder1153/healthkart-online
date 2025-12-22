@@ -25,41 +25,73 @@ const Auth = () => {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; confirmPassword?: string }>({});
+  const [recoverySession, setRecoverySession] = useState<any>(null);
 
   useEffect(() => {
-    // Check if this is a password reset flow
+    // Check hash for recovery mode FIRST before any other logic
     const hash = window.location.hash;
-    if (hash && hash.includes('type=recovery')) {
+    const isRecoveryFlow = hash && (hash.includes('type=recovery') || hash.includes('access_token'));
+    
+    if (isRecoveryFlow) {
       setIsResetPassword(true);
-      return; // Don't redirect - let user reset password
+      
+      // Extract and process the access token from the URL hash
+      // Supabase will handle this automatically, but we need to wait for it
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          console.log('Recovery session established');
+          setRecoverySession(session);
+        }
+      });
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      // Don't redirect if in password reset mode
-      if (isResetPassword) return;
+      console.log('Auth event:', event, 'Session:', !!session);
       
-      if (session && event !== 'PASSWORD_RECOVERY') {
+      // Handle PASSWORD_RECOVERY event specifically
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsResetPassword(true);
+        setRecoverySession(session);
+        return;
+      }
+      
+      // Handle token refresh during recovery
+      if (event === 'TOKEN_REFRESHED' && isResetPassword) {
+        setRecoverySession(session);
+        return;
+      }
+      
+      // Handle initial sign in from recovery link
+      if (event === 'SIGNED_IN' && isRecoveryFlow) {
+        setRecoverySession(session);
+        return;
+      }
+      
+      // If we're in reset password mode, don't redirect
+      if (isResetPassword || isRecoveryFlow) {
+        if (session) {
+          setRecoverySession(session);
+        }
+        return;
+      }
+      
+      // For other auth events, redirect if logged in
+      if (session && event === 'SIGNED_IN') {
         navigate("/");
       }
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      // Don't redirect if in password reset mode
-      if (isResetPassword) return;
-      
-      if (session) {
-        // Check if this is a recovery session
-        const hash = window.location.hash;
-        if (hash && hash.includes('type=recovery')) {
-          setIsResetPassword(true);
-          return;
+    // Check current session - but don't redirect if recovery flow
+    if (!isRecoveryFlow) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          navigate("/");
         }
-        navigate("/");
-      }
-    });
+      });
+    }
 
     return () => subscription.unsubscribe();
-  }, [navigate, isResetPassword]);
+  }, [navigate]);
 
   const validateForm = () => {
     const newErrors: { email?: string; password?: string; confirmPassword?: string } = {};
@@ -221,6 +253,7 @@ const Auth = () => {
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
     
     const passwordResult = passwordSchema.safeParse(password);
     if (!passwordResult.success) {
@@ -235,13 +268,25 @@ const Auth = () => {
 
     setLoading(true);
     try {
+      // Check if we have a valid session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error("Your password reset link has expired. Please request a new one.");
+      }
+
       const { error } = await supabase.auth.updateUser({ password });
 
-      if (error) throw error;
+      if (error) {
+        if (error.message.includes('same_password')) {
+          throw new Error("New password must be different from your current password.");
+        }
+        throw error;
+      }
 
       toast({
         title: "Password updated!",
-        description: "Your password has been successfully reset.",
+        description: "Your password has been successfully reset. Please login with your new password.",
       });
       
       // Sign out and redirect to login
@@ -251,10 +296,12 @@ const Auth = () => {
       setPassword("");
       setConfirmPassword("");
       window.location.hash = "";
+      navigate("/auth");
     } catch (error: any) {
+      console.error('Password reset error:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || "Failed to update password. Please try again.",
         variant: "destructive",
       });
     } finally {
