@@ -28,16 +28,16 @@ export const ProductCard = ({
   return (
     <Card className="group overflow-hidden transition-all hover:shadow-lg border-border/50">
       <Link to={`/product/${id}`}>
-      <div className="aspect-square overflow-hidden bg-muted/30 p-4 flex items-center justify-center">
+        <div className="aspect-square overflow-hidden bg-gradient-to-br from-muted/20 to-muted/40 flex items-center justify-center p-6">
           {image_url ? (
             <img
               src={image_url}
               alt={name}
-              className="max-h-full max-w-full object-contain transition-transform group-hover:scale-105"
+              className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-110"
             />
           ) : (
-            <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-primary/5 to-secondary/5">
-              <span className="text-4xl text-muted-foreground">💊</span>
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/5 to-secondary/5 rounded-lg">
+              <span className="text-5xl text-muted-foreground">💊</span>
             </div>
           )}
         </div>

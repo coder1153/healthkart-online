@@ -248,59 +248,160 @@ const Index = () => {
       </section>
 
       {/* Footer */}
-      <footer className="bg-card border-t py-12">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div>
-              <h3 className="font-bold text-lg mb-4">
-                <a
-                  href="https://peonylifesciences.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-foreground transition-colors">Peony Life Sciences</a>
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Leading pharmaceutical innovation with world-class quality standards, delivering life-saving medicines to patients globally through cutting-edge research and manufacturing excellence.
+      <footer className="relative bg-gradient-to-br from-primary via-primary/95 to-primary/85 text-primary-foreground overflow-hidden">
+        {/* Decorative Elements */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-10 left-10 w-64 h-64 bg-white rounded-full blur-3xl" />
+          <div className="absolute bottom-10 right-10 w-80 h-80 bg-white rounded-full blur-3xl" />
+        </div>
+        
+        <div className="relative container mx-auto px-4 py-16">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
+            {/* Brand Section */}
+            <div className="lg:col-span-1">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-12 w-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                  <span className="text-white font-bold text-xl">P</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-xl text-white">Peony LifeStore</h3>
+                  <p className="text-white/70 text-sm">Gentle. Pure. Trusted.</p>
+                </div>
+              </div>
+              <p className="text-white/80 text-sm leading-relaxed">
+                Leading pharmaceutical innovation with world-class quality standards, delivering life-saving medicines to patients globally.
               </p>
             </div>
-            <div>
-              <h4 className="font-semibold mb-4">Quick Links</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a
-                  href="https://peonylifesciences.com/about"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-foreground transition-colors">About Us</a></li>
 
-                <li> <a
-                  href="https://peonylifesciences.com/contact"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-foreground transition-colors"
-                >Contact</a></li>
+            {/* Quick Links */}
+            <div>
+              <h4 className="font-semibold text-lg mb-6 text-white">Quick Links</h4>
+              <ul className="space-y-3">
+                <li>
+                  <a
+                    href="https://peonylifesciences.com/about"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-white/80 hover:text-white transition-colors flex items-center gap-2 group"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-white/50 group-hover:bg-white transition-colors" />
+                    About Us
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="/products"
+                    className="text-white/80 hover:text-white transition-colors flex items-center gap-2 group"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-white/50 group-hover:bg-white transition-colors" />
+                    Products
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://peonylifesciences.com/contact"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-white/80 hover:text-white transition-colors flex items-center gap-2 group"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-white/50 group-hover:bg-white transition-colors" />
+                    Contact
+                  </a>
+                </li>
                 <li>
                   <a
                     href="https://terms.peonylifesciences.com/"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="hover:text-foreground transition-colors"
+                    className="text-white/80 hover:text-white transition-colors flex items-center gap-2 group"
                   >
+                    <span className="w-1.5 h-1.5 rounded-full bg-white/50 group-hover:bg-white transition-colors" />
                     Privacy Policy
                   </a>
                 </li>
               </ul>
             </div>
+
+            {/* Contact Info */}
             <div>
-              <h4 className="font-semibold mb-4">Contact</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>Email: support@peonylifesciences.com
+              <h4 className="font-semibold text-lg mb-6 text-white">Contact Us</h4>
+              <ul className="space-y-4">
+                <li className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-white/60 text-xs uppercase tracking-wider mb-1">Email</p>
+                    <a href="mailto:support@peonylifesciences.com" className="text-white/90 hover:text-white transition-colors text-sm">
+                      support@peonylifesciences.com
+                    </a>
+                  </div>
                 </li>
-                <li>Phone: +91 70109 66990</li>
+                <li className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-white/60 text-xs uppercase tracking-wider mb-1">Phone</p>
+                    <a href="tel:+917010966990" className="text-white/90 hover:text-white transition-colors text-sm">
+                      +91 70109 66990
+                    </a>
+                  </div>
+                </li>
               </ul>
             </div>
+
+            {/* Newsletter / CTA */}
+            <div>
+              <h4 className="font-semibold text-lg mb-6 text-white">Stay Connected</h4>
+              <p className="text-white/80 text-sm mb-4">
+                Get updates on new products and special offers.
+              </p>
+              <Button 
+                variant="secondary" 
+                className="w-full bg-white text-primary hover:bg-white/90 font-semibold"
+                onClick={() => navigate("/products")}
+              >
+                Explore Products
+              </Button>
+              
+              {/* Social Icons */}
+              <div className="flex gap-3 mt-6">
+                <a 
+                  href="https://peonylifesciences.com" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.164 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.341-3.369-1.341-.454-1.155-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.564 9.564 0 0112 6.844c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.161 22 16.418 22 12c0-5.523-4.477-10-10-10z" />
+                  </svg>
+                </a>
+              </div>
+            </div>
           </div>
-          <div className="mt-8 pt-8 border-t text-center text-sm text-muted-foreground">
-            © 2024 Peony Life Sciences. All rights reserved.
+
+          {/* Bottom Bar */}
+          <div className="mt-12 pt-8 border-t border-white/20">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+              <p className="text-white/70 text-sm">
+                © {new Date().getFullYear()} Peony Life Sciences. All rights reserved.
+              </p>
+              <div className="flex items-center gap-6">
+                <a 
+                  href="https://peonylifesciences.com" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-white/70 hover:text-white text-sm transition-colors"
+                >
+                  peonylifesciences.com
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       </footer>
